@@ -332,7 +332,7 @@
       </div>
     </div>
   </div>
-<!-- full updated JS: Three icons + widget logic with backend integration -->
+<!-- full updated JS: Three icons + widget logic with backend integration + runtime translation -->
 <script type="module">
   import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
 
@@ -340,7 +340,7 @@
   (function(){
     const canvas = document.getElementById('chatIconCanvas');
     if (!canvas) return;
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias: true });
     renderer.setSize(48,48);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45,1,0.1,10); camera.position.z = 2.2;
@@ -383,6 +383,14 @@
     // ---- config ----
     // DEV: Replace with secure approach in production (server-side proxy). For testing only.
     const AUTH_TOKEN = 'tok_ABC_2025_example_0001';
+
+    // Translator service config (LibreTranslate demo endpoint). Replace with your own if preferred.
+    // NOTE: Using an external translation endpoint may be blocked by CORS in some environments.
+    const TRANSLATE_API_URL = 'https://libretranslate.com/translate'; // public demo endpoint
+    const TRANSLATE_ENABLED = true; // flip to false to disable translation calls
+
+    // language -> target code mapping
+    const LANG_CODE = { 'English': 'en', 'Hindi': 'hi', 'Marathi': 'mr' };
 
     // ---- themes (unchanged) ----
     const themes = [
@@ -473,6 +481,62 @@
       });
     }
 
+    // ---- translation helpers ----
+    async function translateText(text, targetLangCode='en') {
+      // no-op if translation disabled or target is English
+      if (!TRANSLATE_ENABLED || !text || targetLangCode === 'en') return text;
+      try {
+        // perform a simple POST to LibreTranslate demo endpoint
+        const payload = { q: text, source: 'auto', target: targetLangCode, format: 'text' };
+        const res = await fetch(TRANSLATE_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          // fail silently and return original
+          return text;
+        }
+        const j = await res.json();
+        if (j && (j.translatedText || j.translated_text)) return j.translatedText || j.translated_text;
+        // some LibreTranslate endpoints return { translatedText }
+        return text;
+      } catch (err) {
+        // network/CORS or other – fallback to original
+        return text;
+      }
+    }
+
+    // wrapper: translate if required by currentLang and then type it
+    async function showTranslatedAndType(text, speed=26) {
+      try {
+        const code = LANG_CODE[currentLang] || 'en';
+        if (code === 'en' || !TRANSLATE_ENABLED) {
+          await typeIntoBubble(text, speed);
+        } else {
+          const translated = await translateText(text, code);
+          await typeIntoBubble(translated, speed);
+        }
+      } catch (err) {
+        await typeIntoBubble(text, speed);
+      }
+    }
+
+    // translate an array of suggestion strings and render (parallel)
+    async function translateSuggestionsAndRender(list) {
+      if (!Array.isArray(list) || list.length === 0) return renderSuggestions(list); // nothing to do; render as-is
+      const code = LANG_CODE[currentLang] || 'en';
+      if (code === 'en' || !TRANSLATE_ENABLED) return renderSuggestions(list);
+      try {
+        // translate suggestions in parallel but limit concurrency (simple)
+        const translatedPromises = list.slice(0,8).map(s => translateText(s, code));
+        const translated = await Promise.all(translatedPromises);
+        renderSuggestions(translated);
+      } catch (err) {
+        renderSuggestions(list); // fallback
+      }
+    }
+
     // ---- initial language chips ----
     function renderInitial(){
       if (!messages) return;
@@ -508,7 +572,8 @@
       const t = showTyping();
       await new Promise(r=>setTimeout(r,700));
       t && t.remove();
-      await typeIntoBubble(greetings[lang] || greetings.English, 26);
+      // greeting already localized — show it with typing effect (no extra translation)
+      await showTranslatedAndType(greetings[lang] || greetings.English, 26);
       await new Promise(r=>setTimeout(r,220));
       const follow = document.createElement('div'); follow.className='msg ai';
       const fb = document.createElement('div'); fb.className='bubble';
@@ -519,129 +584,161 @@
                         <button class="lang-cap suggestion">Exam tips</button>
                       </div>`;
       follow.appendChild(fb); messages.appendChild(follow); scrollToBottom();
+
+      // translate the quick suggestions right away if language != English
+      if ((LANG_CODE[currentLang] || 'en') !== 'en' && TRANSLATE_ENABLED) {
+        // get those suggestion nodes and translate labels
+        const nodes = follow.querySelectorAll('.suggestion');
+        nodes.forEach(async n => {
+          const orig = n.textContent || n.innerText;
+          try {
+            const tr = await translateText(orig, LANG_CODE[currentLang]);
+            n.textContent = tr || orig;
+          } catch (e) { /* ignore */ }
+        });
+      }
+
+      // attach handlers
+      document.querySelectorAll('.suggestion').forEach(el=>el.addEventListener('click', ()=> sendToAPI(el.textContent)));
     }
 
     if (langToggle) {
       langToggle.addEventListener('click', ()=> {
         setLanguage(currentLang === 'English' ? 'Hindi' : 'English');
         const t = showTyping();
-        setTimeout(async ()=> { t && t.remove(); await typeIntoBubble(currentLang === 'English' ? greetings['English'] : greetings['Hindi'], 18); }, 500);
+        setTimeout(async ()=> { t && t.remove(); await showTranslatedAndType(currentLang === 'English' ? greetings['English'] : greetings['Hindi'], 18); }, 500);
       });
     }
-  // Main Executable File 
-  async function sendToAPI(queryText){ 
-    if (!queryText || !queryText.trim()) return;
-    addBubble(queryText.trim(), 'user');
-    if (input) input.value = '';
-    const typingEl = showTyping();
 
-    try {
-      const res = await fetch('/Api/getCollegeData.php', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ auth_token: AUTH_TOKEN, query: queryText, limit: 6 })
-      });
+    // Main Executable File 
+    async function sendToAPI(queryText){ 
+      if (!queryText || !queryText.trim()) return;
+      addBubble(queryText.trim(), 'user');
+      if (input) input.value = '';
+      const typingEl = showTyping();
 
-      if (!res.ok) throw new Error('Network error ' + res.status);
-      const data = await res.json();
-      typingEl && typingEl.remove();
+      try {
+        const res = await fetch('/Api/getCollegeData.php', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ auth_token: AUTH_TOKEN, query: queryText, limit: 6 })
+        });
 
-      if (!data || data.status !== 'ok') {
-        const msg = (data && data.message) ? data.message : 'Unable to fetch results.';
-        await typeIntoBubble('Sorry — ' + msg, 22);
-        return;
-      }
+        if (!res.ok) throw new Error('Network error ' + res.status);
+        const data = await res.json();
+        typingEl && typingEl.remove();
 
-      // CASE A: direct matched results -> pick best result and show its answer (typewriter)
-      if (Array.isArray(data.results) && data.results.length > 0) {
-        const top = data.results[0];
-        // Prefer presenting: CLG_BASIC.detailed_description -> snippet -> custom answer
-        let mainText = '';
-        if (top.CLG_BASIC && top.CLG_BASIC.detailed_description) mainText = top.CLG_BASIC.detailed_description;
-        else if (top.snippet) mainText = top.snippet;
-        else if (top.CLG_BASIC && top.CLG_BASIC.short_description) mainText = top.CLG_BASIC.short_description;
-        else mainText = 'Here is some information I found.';
+        if (!data || data.status !== 'ok') {
+          const msg = (data && data.message) ? data.message : 'Unable to fetch results.';
+          await showTranslatedAndType('Sorry — ' + msg, 22);
+          return;
+        }
 
-        // show main response using typing animation only
-        await typeIntoBubble(mainText, 22);
+        // CASE A: direct matched results -> pick best result and show its answer (typewriter)
+        if (Array.isArray(data.results) && data.results.length > 0) {
+          const top = data.results[0];
 
-        // then render structured parts as normal bubbles (courses/faqs)
-        // COURSES
-        if (top.CLG_COURSES && (top.CLG_COURSES.courses || Array.isArray(top.CLG_COURSES))) {
-          const list = Array.isArray(top.CLG_COURSES.courses) ? top.CLG_COURSES.courses : (Array.isArray(top.CLG_COURSES) ? top.CLG_COURSES : []);
-          if (list.length) {
+          // Prefer presenting: CLG_BASIC.detailed_description -> snippet -> custom answer
+          let mainText = '';
+          if (top.CLG_BASIC && top.CLG_BASIC.detailed_description) mainText = top.CLG_BASIC.detailed_description;
+          else if (top.snippet) mainText = top.snippet;
+          else if (top.CLG_BASIC && top.CLG_BASIC.short_description) mainText = top.CLG_BASIC.short_description;
+          else mainText = 'Here is some information I found.';
+
+          // show main response using typing animation only (translated if needed)
+          await showTranslatedAndType(mainText, 22);
+
+          // then render structured parts as normal bubbles (courses/faqs) — translate labels & items where possible
+          // COURSES
+          if (top.CLG_COURSES && (top.CLG_COURSES.courses || Array.isArray(top.CLG_COURSES))) {
+            const list = Array.isArray(top.CLG_COURSES.courses) ? top.CLG_COURSES.courses : (Array.isArray(top.CLG_COURSES) ? top.CLG_COURSES : []);
+            if (list.length) {
+              const wrap = document.createElement('div'); wrap.className = 'msg ai';
+              const b = document.createElement('div'); b.className = 'bubble';
+              let html = '<div style="font-weight:700;margin-bottom:6px">Courses</div><ul style="margin:0;padding-left:18px">';
+              for (const c of list) {
+                const nm = c.name || c.course || JSON.stringify(c);
+                const dur = c.duration ? ` — ${c.duration}` : '';
+                // translate course name if needed
+                let itemText = nm + (dur ? dur : '');
+                if ((LANG_CODE[currentLang] || 'en') !== 'en' && TRANSLATE_ENABLED) {
+                  try { itemText = await translateText(itemText, LANG_CODE[currentLang]); } catch(e){ /* ignore */ }
+                }
+                html += `<li>${escapeHtml(itemText)}</li>`;
+              }
+              html += '</ul>';
+              b.innerHTML = html; wrap.appendChild(b); messages.appendChild(wrap);
+            }
+          }
+
+          // FAQ
+          if (top.CLG_BASIC && Array.isArray(top.CLG_BASIC.faqs) && top.CLG_BASIC.faqs.length) {
             const wrap = document.createElement('div'); wrap.className = 'msg ai';
             const b = document.createElement('div'); b.className = 'bubble';
-            let html = '<div style="font-weight:700;margin-bottom:6px">Courses</div><ul style="margin:0;padding-left:18px">';
-            list.forEach(c => {
-              const nm = c.name || c.course || JSON.stringify(c);
-              const dur = c.duration ? ` — ${c.duration}` : '';
-              html += `<li>${nm}${dur}</li>`;
-            });
-            html += '</ul>';
+            let html = '<div style="font-weight:700;margin-bottom:6px">FAQs</div>';
+            const faqs = top.CLG_BASIC.faqs.slice(0,3);
+            for (const f of faqs) {
+              let q = f.q || '';
+              let a = f.a || '';
+              if ((LANG_CODE[currentLang] || 'en') !== 'en' && TRANSLATE_ENABLED) {
+                try {
+                  [q, a] = await Promise.all([translateText(q, LANG_CODE[currentLang]), translateText(a, LANG_CODE[currentLang])]);
+                } catch(e) {}
+              }
+              html += `<div style="margin-bottom:6px"><strong>${escapeHtml(q)}</strong><div>${escapeHtml(a)}</div></div>`;
+            }
             b.innerHTML = html; wrap.appendChild(b); messages.appendChild(wrap);
           }
+
+          // finally suggestions (translate then render)
+          if (Array.isArray(data.suggestions) && data.suggestions.length) {
+            await translateSuggestionsAndRender(data.suggestions);
+          }
+          return;
         }
 
-        // FAQ
-        if (top.CLG_BASIC && Array.isArray(top.CLG_BASIC.faqs) && top.CLG_BASIC.faqs.length) {
-          const wrap = document.createElement('div'); wrap.className = 'msg ai';
-          const b = document.createElement('div'); b.className = 'bubble';
-          let html = '<div style="font-weight:700;margin-bottom:6px">FAQs</div>';
-          top.CLG_BASIC.faqs.slice(0,3).forEach(f => html += `<div style="margin-bottom:6px"><strong>${f.q}</strong><div>${f.a}</div></div>`);
-          b.innerHTML = html; wrap.appendChild(b); messages.appendChild(wrap);
+        // CASE B: no direct results -> API returned nearest_qa OR nearest_suggestions
+        if (Array.isArray(data.nearest_qa) && data.nearest_qa.length) {
+          // present top nearest QA answer using typing animation (translate)
+          const qa = data.nearest_qa[0];
+          const mainText = qa.answer || qa.question || 'I found something related: ' + (qa.question || '');
+          await showTranslatedAndType(mainText, 22);
+
+          // show question buttons (nearest QA) below — translate questions labels
+          const questions = data.nearest_qa.slice(0,6).map(q => q.question || '');
+          if (questions.length) {
+            // translate questions if necessary then render as suggestion buttons
+            if ((LANG_CODE[currentLang] || 'en') !== 'en' && TRANSLATE_ENABLED) {
+              const translatedQs = await Promise.all(questions.map(q => translateText(q, LANG_CODE[currentLang])));
+              renderSuggestions(translatedQs);
+            } else {
+              renderSuggestions(questions);
+            }
+          }
+
+          return;
         }
 
-        // finally suggestions
-        if (Array.isArray(data.suggestions) && data.suggestions.length) {
-          renderSuggestions(data.suggestions);
+        // CASE C: no qa either -> show nearest_suggestions (buttons). Use one typed line only
+        if (Array.isArray(data.nearest_suggestions) && data.nearest_suggestions.length) {
+          await showTranslatedAndType('I could not find an exact match. You can try one of these:', 22);
+          await translateSuggestionsAndRender(data.nearest_suggestions);
+          return;
         }
-        return;
+
+        // final fallback
+        await showTranslatedAndType('Sorry, I could not find relevant information. Try asking about placements, fees, or hostel.', 22);
+
+      } catch (err) {
+        typingEl && typingEl.remove();
+        console.error(err);
+        await showTranslatedAndType('Sorry — an error occurred while fetching data.', 20);
+      } finally {
+        scrollToBottom();
       }
-
-      // CASE B: no direct results -> API returned nearest_qa OR nearest_suggestions
-      if (Array.isArray(data.nearest_qa) && data.nearest_qa.length) {
-        // present top nearest QA answer using typing animation
-        const qa = data.nearest_qa[0];
-        const mainText = qa.answer || qa.question || 'I found something related: ' + (qa.question || '');
-        await typeIntoBubble(mainText, 22);
-
-        // show question buttons (nearest QA) below
-        const follow = document.createElement('div'); follow.className = 'msg ai';
-        const fb = document.createElement('div'); fb.className = 'bubble';
-        let html = '<div style="font-weight:700;margin-bottom:6px">Related questions</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
-        data.nearest_qa.slice(0,6).forEach(q => { html += `<button class="lang-cap suggestion">${escapeHtml(q.question)}</button>`; });
-        html += '</div>';
-        fb.innerHTML = html; follow.appendChild(fb); messages.appendChild(follow);
-
-        // wire suggestion clicks
-        const nodes = messages.querySelectorAll('.suggestion');
-        nodes.forEach(n => n.addEventListener('click', ()=> sendToAPI(n.textContent || n.innerText)));
-
-        return;
-      }
-
-      // CASE C: no qa either -> show nearest_suggestions (buttons). Use one typed line only
-      if (Array.isArray(data.nearest_suggestions) && data.nearest_suggestions.length) {
-        await typeIntoBubble('I could not find an exact match. You can try one of these:', 22);
-        renderSuggestions(data.nearest_suggestions);
-        return;
-      }
-
-      // final fallback
-      await typeIntoBubble('Sorry, I could not find relevant information. Try asking about placements, fees, or hostel.', 22);
-
-    } catch (err) {
-      typingEl && typingEl.remove();
-      console.error(err);
-      await typeIntoBubble('Sorry — an error occurred while fetching data.', 20);
-    } finally {
-      scrollToBottom();
     }
-  }
 
-
-    // helper: add structured result DOM
+    // helper: add structured result DOM (kept for potential other uses)
     function addStructuredResult(title, r){
       const wrap = document.createElement('div'); wrap.className = 'msg ai';
       const b = document.createElement('div'); b.className = 'bubble';
@@ -649,12 +746,10 @@
       let html = `<div style="font-weight:800;margin-bottom:6px">${escapeHtml(title)}</div>`;
       if (r.snippet) html += `<div style="margin-bottom:8px">${escapeHtml(r.snippet)}</div>`;
 
-      // CLG_BASIC detailed_description
       if (r.CLG_BASIC && r.CLG_BASIC.detailed_description) {
         html += `<div style="margin-bottom:8px">${escapeHtml(r.CLG_BASIC.detailed_description)}</div>`;
       }
 
-      // Courses
       if (r.CLG_COURSES && (r.CLG_COURSES.courses || Array.isArray(r.CLG_COURSES))) {
         const list = Array.isArray(r.CLG_COURSES.courses) ? r.CLG_COURSES.courses : (Array.isArray(r.CLG_COURSES) ? r.CLG_COURSES : []);
         if (list.length) {
@@ -668,11 +763,9 @@
         }
       }
 
-      // Fees (if present)
       if (r.CLG_FEES) {
         try {
           const fees = r.CLG_FEES;
-          // if fees is object or array, show top-level keys
           if (typeof fees === 'object' && fees !== null) {
             html += `<div style="font-weight:700;margin-top:6px">Fees (summary)</div><ul style="margin:6px 0 0 16px;padding:0">`;
             for (const k in fees) {
@@ -719,7 +812,7 @@
       return str.replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
     }
 
-    // ---- replace old sendUser with sendToAPI wiring ----
+    // ---- wire send controls ----
     sendBtn && sendBtn.addEventListener('click', ()=> sendToAPI(input ? input.value : ''));
     input && input.addEventListener('keydown', (e)=> { if (e.key === 'Enter'){ e.preventDefault(); sendToAPI(input.value); } });
 
@@ -748,8 +841,11 @@
     // Expose sendToAPI for debugging
     window.ChatGoD = window.ChatGoD || {};
     window.ChatGoD.sendToAPI = sendToAPI;
+    window.ChatGoD.translateText = translateText; // exposed for debugging
+
   })();
 </script>
+
 
 </body>
 </html>
