@@ -528,63 +528,118 @@
         setTimeout(async ()=> { t && t.remove(); await typeIntoBubble(currentLang === 'English' ? greetings['English'] : greetings['Hindi'], 18); }, 500);
       });
     }
+  // Main Executable File 
+  async function sendToAPI(queryText){ 
+    if (!queryText || !queryText.trim()) return;
+    addBubble(queryText.trim(), 'user');
+    if (input) input.value = '';
+    const typingEl = showTyping();
 
-    // ---- NEW: backend integration (sendToAPI) ----
-    async function sendToAPI(queryText){
-      if (!queryText || !queryText.trim()) return;
-      addBubble(queryText.trim(), 'user');
-      if (input) input.value = '';
-      const typingEl = showTyping();
+    try {
+      const res = await fetch('/Api/getCollegeData.php', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ auth_token: AUTH_TOKEN, query: queryText, limit: 6 })
+      });
 
-      try {
-        const res = await fetch('/Api/getCollegeData.php', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ auth_token: AUTH_TOKEN, query: queryText, limit: 6 })
-        });
+      if (!res.ok) throw new Error('Network error ' + res.status);
+      const data = await res.json();
+      typingEl && typingEl.remove();
 
-        if (!res.ok) {
-          throw new Error('Network error ' + res.status);
-        }
-        const data = await res.json();
-        typingEl && typingEl.remove();
-
-        if (!data || data.status !== 'ok') {
-          const msg = (data && data.message) ? data.message : 'Unable to fetch results.';
-          await typeIntoBubble('Sorry — ' + msg, 22);
-          return;
-        }
-
-        // friendly top-level summary
-        const count = data.results_count || (data.results ? data.results.length : 0);
-        await typeIntoBubble(`Found ${count} matching record(s) for ${data.college?.CLG_NAME || 'your college'}. Showing top results.`, 20);
-
-        // render each result (up to 3) with snippet and structured info
-        const results = data.results || [];
-        const maxShow = Math.min(3, results.length);
-        for (let i=0;i<maxShow;i++){
-          const r = results[i];
-          // title
-          const title = (r.CLG_BASIC && r.CLG_BASIC.name) ? r.CLG_BASIC.name : (r.DATA_TYPE || 'Information');
-          addStructuredResult(title, r);
-          await new Promise(rp=>setTimeout(rp, 160)); // tiny gap
-        }
-
-        // suggestions (from API)
-        if (Array.isArray(data.suggestions) && data.suggestions.length > 0){
-          renderSuggestions(data.suggestions);
-        } else {
-          renderSuggestions(['Ask about placements','Ask about fees','Ask about hostel']);
-        }
-
-      } catch (err) {
-        typingEl && typingEl.remove();
-        console.error(err);
-        await typeIntoBubble('Sorry — an error occurred while fetching data.', 20);
-      } finally {
-        scrollToBottom();
+      if (!data || data.status !== 'ok') {
+        const msg = (data && data.message) ? data.message : 'Unable to fetch results.';
+        await typeIntoBubble('Sorry — ' + msg, 22);
+        return;
       }
+
+      // CASE A: direct matched results -> pick best result and show its answer (typewriter)
+      if (Array.isArray(data.results) && data.results.length > 0) {
+        const top = data.results[0];
+        // Prefer presenting: CLG_BASIC.detailed_description -> snippet -> custom answer
+        let mainText = '';
+        if (top.CLG_BASIC && top.CLG_BASIC.detailed_description) mainText = top.CLG_BASIC.detailed_description;
+        else if (top.snippet) mainText = top.snippet;
+        else if (top.CLG_BASIC && top.CLG_BASIC.short_description) mainText = top.CLG_BASIC.short_description;
+        else mainText = 'Here is some information I found.';
+
+        // show main response using typing animation only
+        await typeIntoBubble(mainText, 22);
+
+        // then render structured parts as normal bubbles (courses/faqs)
+        // COURSES
+        if (top.CLG_COURSES && (top.CLG_COURSES.courses || Array.isArray(top.CLG_COURSES))) {
+          const list = Array.isArray(top.CLG_COURSES.courses) ? top.CLG_COURSES.courses : (Array.isArray(top.CLG_COURSES) ? top.CLG_COURSES : []);
+          if (list.length) {
+            const wrap = document.createElement('div'); wrap.className = 'msg ai';
+            const b = document.createElement('div'); b.className = 'bubble';
+            let html = '<div style="font-weight:700;margin-bottom:6px">Courses</div><ul style="margin:0;padding-left:18px">';
+            list.forEach(c => {
+              const nm = c.name || c.course || JSON.stringify(c);
+              const dur = c.duration ? ` — ${c.duration}` : '';
+              html += `<li>${nm}${dur}</li>`;
+            });
+            html += '</ul>';
+            b.innerHTML = html; wrap.appendChild(b); messages.appendChild(wrap);
+          }
+        }
+
+        // FAQ
+        if (top.CLG_BASIC && Array.isArray(top.CLG_BASIC.faqs) && top.CLG_BASIC.faqs.length) {
+          const wrap = document.createElement('div'); wrap.className = 'msg ai';
+          const b = document.createElement('div'); b.className = 'bubble';
+          let html = '<div style="font-weight:700;margin-bottom:6px">FAQs</div>';
+          top.CLG_BASIC.faqs.slice(0,3).forEach(f => html += `<div style="margin-bottom:6px"><strong>${f.q}</strong><div>${f.a}</div></div>`);
+          b.innerHTML = html; wrap.appendChild(b); messages.appendChild(wrap);
+        }
+
+        // finally suggestions
+        if (Array.isArray(data.suggestions) && data.suggestions.length) {
+          renderSuggestions(data.suggestions);
+        }
+        return;
+      }
+
+      // CASE B: no direct results -> API returned nearest_qa OR nearest_suggestions
+      if (Array.isArray(data.nearest_qa) && data.nearest_qa.length) {
+        // present top nearest QA answer using typing animation
+        const qa = data.nearest_qa[0];
+        const mainText = qa.answer || qa.question || 'I found something related: ' + (qa.question || '');
+        await typeIntoBubble(mainText, 22);
+
+        // show question buttons (nearest QA) below
+        const follow = document.createElement('div'); follow.className = 'msg ai';
+        const fb = document.createElement('div'); fb.className = 'bubble';
+        let html = '<div style="font-weight:700;margin-bottom:6px">Related questions</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
+        data.nearest_qa.slice(0,6).forEach(q => { html += `<button class="lang-cap suggestion">${escapeHtml(q.question)}</button>`; });
+        html += '</div>';
+        fb.innerHTML = html; follow.appendChild(fb); messages.appendChild(follow);
+
+        // wire suggestion clicks
+        const nodes = messages.querySelectorAll('.suggestion');
+        nodes.forEach(n => n.addEventListener('click', ()=> sendToAPI(n.textContent || n.innerText)));
+
+        return;
+      }
+
+      // CASE C: no qa either -> show nearest_suggestions (buttons). Use one typed line only
+      if (Array.isArray(data.nearest_suggestions) && data.nearest_suggestions.length) {
+        await typeIntoBubble('I could not find an exact match. You can try one of these:', 22);
+        renderSuggestions(data.nearest_suggestions);
+        return;
+      }
+
+      // final fallback
+      await typeIntoBubble('Sorry, I could not find relevant information. Try asking about placements, fees, or hostel.', 22);
+
+    } catch (err) {
+      typingEl && typingEl.remove();
+      console.error(err);
+      await typeIntoBubble('Sorry — an error occurred while fetching data.', 20);
+    } finally {
+      scrollToBottom();
     }
+  }
+
 
     // helper: add structured result DOM
     function addStructuredResult(title, r){
