@@ -332,305 +332,369 @@
       </div>
     </div>
   </div>
+<!-- full updated JS: Three icons + widget logic with backend integration -->
+<script type="module">
+  import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
 
-  <!-- scripts: Three icons + widget logic -->
-  <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
+  // ---------- small rotating 3D icon for launcher ----------
+  (function(){
+    const canvas = document.getElementById('chatIconCanvas');
+    if (!canvas) return;
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
+    renderer.setSize(48,48);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45,1,0.1,10); camera.position.z = 2.2;
+    const geo = new THREE.TorusKnotGeometry(0.4,0.12,64,12);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, opacity: 0.9, transparent: true });
+    const mesh = new THREE.Mesh(geo, mat); scene.add(mesh);
+    (function animate(){ requestAnimationFrame(animate); mesh.rotation.x += 0.01; mesh.rotation.y += 0.014; renderer.render(scene,camera); })();
+  })();
 
-    // ---------- small rotating 3D icon for launcher ----------
-    (function(){
-      const canvas = document.getElementById('chatIconCanvas');
-      const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
-      renderer.setSize(48,48);
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(45,1,0.1,10); camera.position.z = 2.2;
-      const geo = new THREE.TorusKnotGeometry(0.4,0.12,64,12);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, opacity: 0.9, transparent: true });
-      const mesh = new THREE.Mesh(geo, mat); scene.add(mesh);
-      (function animate(){ requestAnimationFrame(animate); mesh.rotation.x += 0.01; mesh.rotation.y += 0.014; renderer.render(scene,camera); })();
-    })();
+  // ---------- small 3D robot head in header ----------
+  (function(){
+    const canvas = document.getElementById('robotAvatarCanvas');
+    if (!canvas) return;
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
+    renderer.setSize(44,44);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45,1,0.1,10); camera.position.z = 2;
+    const geo = new THREE.SphereGeometry(0.6, 24, 24);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x8be4ff, wireframe: false });
+    const mesh = new THREE.Mesh(geo, mat); scene.add(mesh);
+    (function animate(){ requestAnimationFrame(animate); mesh.rotation.y += 0.015; renderer.render(scene,camera); })();
+  })();
+</script>
 
-    // ---------- small 3D robot head in header ----------
-    (function(){
-      const canvas = document.getElementById('robotAvatarCanvas');
-      const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
-      renderer.setSize(44,44);
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(45,1,0.1,10); camera.position.z = 2;
-      const geo = new THREE.SphereGeometry(0.6, 24, 24);
-      const mat = new THREE.MeshBasicMaterial({ color: 0x8be4ff, wireframe: false });
-      const mesh = new THREE.Mesh(geo, mat); scene.add(mesh);
-      (function animate(){ requestAnimationFrame(animate); mesh.rotation.y += 0.015; renderer.render(scene,camera); })();
-    })();
-  </script>
+<script>
+  (function(){
+    // ---- DOM refs ----
+    const widgetRoot = document.getElementById('chatWidget');
+    const launcher = document.getElementById('chatLauncher');
+    const popup = document.getElementById('chatPopup');
+    const closeBtn = document.getElementById('chatClose');
+    const messages = document.getElementById('chatMessages');
+    const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('chatSend');
+    const status = document.getElementById('cg-status');
+    const globalThemeBtn = document.getElementById('globalThemeBtn'); // optional
+    const langToggle = document.getElementById('langToggle'); // optional
+    const timeWidget = document.getElementById('timeWidget'); // optional
 
-  <script>
-    (function(){
-      // DOM refs
-      const widgetRoot = document.getElementById('chatWidget');
-      const launcher = document.getElementById('chatLauncher');
-      const popup = document.getElementById('chatPopup');
-      const closeBtn = document.getElementById('chatClose');
-      const messages = document.getElementById('chatMessages');
-      const input = document.getElementById('chatInput');
-      const sendBtn = document.getElementById('chatSend');
-      const status = document.getElementById('cg-status');
-      const globalThemeBtn = document.getElementById('globalThemeBtn');
-      const langToggle = document.getElementById('langToggle');
+    // ---- config ----
+    // DEV: Replace with secure approach in production (server-side proxy). For testing only.
+    const AUTH_TOKEN = 'tok_ABC_2025_example_0001';
 
-      // theme palette (solid colors only)
-      const themes = [
-        { id:'blue', name:'Blue', vars:{
-          '--bg':'#071126','--header-bg':'#08203a','--messages-bg':'#071126','--input-bg':'#061126','--accent':'#2563eb','--user-bg':'#34d399'} },
-        { id:'mid', name:'Midnight', vars:{
-          '--bg':'#05070a','--header-bg':'#081221','--messages-bg':'#05101a','--input-bg':'#05111b','--accent':'#0ea5e9','--user-bg':'#60a5fa'} },
-        { id:'sage', name:'Sage', vars:{
-          '--bg':'#07120a','--header-bg':'#0b2416','--messages-bg':'#06140c','--input-bg':'#06140c','--accent':'#16a34a','--user-bg':'#86efac'} },
-        { id:'mono', name:'Monochrome', vars:{
-          '--bg':'#ffffff','--header-bg':'#f3f4f6','--messages-bg':'#ffffff','--input-bg':'#f8fafc','--accent':'#374151','--user-bg':'#9ca3af'} }
-      ];
-      let themeIndex = 0;
-
-      function applyTheme(idx){
-        themeIndex = (idx + themes.length) % themes.length;
-        const t = themes[themeIndex];
-        Object.entries(t.vars).forEach(([k,v]) => document.documentElement.style.setProperty(k, v));
-        const root = document.querySelector('.my-ai');
+    // ---- themes (unchanged) ----
+    const themes = [
+      { id:'blue', name:'Blue', vars:{ '--bg':'#071126','--header-bg':'#08203a','--messages-bg':'#071126','--input-bg':'#061126','--accent':'#2563eb','--user-bg':'#34d399'} },
+      { id:'mid', name:'Midnight', vars:{ '--bg':'#05070a','--header-bg':'#081221','--messages-bg':'#05101a','--input-bg':'#05111b','--accent':'#0ea5e9','--user-bg':'#60a5fa'} },
+      { id:'sage', name:'Sage', vars:{ '--bg':'#07120a','--header-bg':'#0b2416','--messages-bg':'#06140c','--input-bg':'#06140c','--accent':'#16a34a','--user-bg':'#86efac'} },
+      { id:'mono', name:'Monochrome', vars:{ '--bg':'#ffffff','--header-bg':'#f3f4f6','--messages-bg':'#ffffff','--input-bg':'#f8fafc','--accent':'#374151','--user-bg':'#9ca3af'} }
+    ];
+    let themeIndex = 0;
+    function applyTheme(idx){
+      themeIndex = (idx + themes.length) % themes.length;
+      const t = themes[themeIndex];
+      Object.entries(t.vars).forEach(([k,v]) => document.documentElement.style.setProperty(k, v));
+      const root = document.querySelector('.my-ai');
+      if (root) {
         root.style.setProperty('--accent', t.vars['--accent']);
         root.style.setProperty('--user-bg', t.vars['--user-bg']);
         root.style.setProperty('--header-bg', t.vars['--header-bg']);
         root.style.setProperty('--messages-bg', t.vars['--messages-bg']);
         root.style.setProperty('--input-bg', t.vars['--input-bg']);
-        // Add/remove mono-theme class for white theme
-        if(t.id === 'mono') root.classList.add('mono-theme');
-        else root.classList.remove('mono-theme');
+        if (t.id === 'mono') root.classList.add('mono-theme'); else root.classList.remove('mono-theme');
       }
-      applyTheme(themeIndex); // default
+    }
+    applyTheme(themeIndex);
+    if (globalThemeBtn) {
+      globalThemeBtn.addEventListener('click', (e)=>{ e.stopPropagation(); applyTheme(themeIndex + 1); anime.timeline({duration:220}).add({targets: '#globalThemeBtn', scale:1.07}).add({targets:'#globalThemeBtn', scale:1}); });
+    }
 
-      globalThemeBtn.addEventListener('click', (e)=>{
-        e.stopPropagation();
-        applyTheme(themeIndex + 1);
-        // quick pulse
-        anime.timeline({duration:220}).add({targets: '#globalThemeBtn', scale:1.07}).add({targets:'#globalThemeBtn', scale:1});
+    // ---- open/close popup ----
+    function openPopup(){
+      if (popup.classList.contains('open')) return;
+      popup.style.pointerEvents = 'auto';
+      anime({ targets: popup, translateY:[20,0], opacity:[0,1], duration:420, easing:'cubicBezier(.17,.67,.2,1)', begin: ()=> popup.classList.add('open') });
+      anime({ targets: launcher, translateY:[0,10], scale:[1,0.95], opacity:[1,0], duration:260, easing:'easeInCubic', complete: ()=> { launcher.style.visibility='hidden'; }});
+      setTimeout(()=> input && input.focus(), 360);
+    }
+    function closePopup(){
+      if (!popup.classList.contains('open')) return;
+      anime({ targets: popup, translateY:[0,20], opacity:[1,0], duration:360, easing:'cubicBezier(.17,.67,.2,1)', complete: ()=> { popup.classList.remove('open'); popup.style.pointerEvents='none'; }});
+      launcher.style.visibility = 'visible';
+      anime({ targets: launcher, translateY:[10,0], scale:[0.96,1], opacity:[0,1], duration:360, easing:'easeOutElastic(1,.6)' });
+    }
+
+    launcher && launcher.addEventListener('click', (e)=> { e.stopPropagation(); openPopup(); });
+    launcher && launcher.addEventListener('keydown', (e)=> { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPopup(); }});
+    closeBtn && closeBtn.addEventListener('click', (e)=> { e.stopPropagation(); closePopup(); });
+
+    document.addEventListener('click', (e)=> { if (!popup.contains(e.target) && !launcher.contains(e.target)) closePopup(); });
+    popup && popup.addEventListener('click', e=> e.stopPropagation());
+    document.addEventListener('keydown', (e)=> { if (e.key === 'Escape') closePopup(); });
+
+    // ---- messaging helpers ----
+    function scrollToBottom(){ if(messages) messages.scrollTop = messages.scrollHeight + 200; }
+    function addBubble(text, who='ai', withTs=true){
+      if (!messages) return null;
+      const wrap = document.createElement('div'); wrap.className = 'msg ' + (who==='user' ? 'user' : 'ai');
+      const bubble = document.createElement('div'); bubble.className = 'bubble';
+      bubble.textContent = text;
+      if (withTs) {
+        const ts = document.createElement('div'); ts.className = 'ts';
+        try { ts.textContent = new Date().toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'}); } catch(e){ ts.textContent = ''; }
+        bubble.appendChild(ts);
+      }
+      wrap.appendChild(bubble); messages.appendChild(wrap); scrollToBottom();
+      return bubble;
+    }
+    function showTyping(){
+      if (!messages) return null;
+      const wrap = document.createElement('div'); wrap.className = 'msg ai';
+      const bubble = document.createElement('div'); bubble.className = 'bubble';
+      bubble.innerHTML = `<span class="typing-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>`;
+      bubble.style.opacity = 0.85;
+      wrap.appendChild(bubble); messages.appendChild(wrap); scrollToBottom();
+      return wrap;
+    }
+    function typeIntoBubble(text, speed=26){
+      if (!messages) return Promise.resolve();
+      const wrap = document.createElement('div'); wrap.className = 'msg ai';
+      const bubble = document.createElement('div'); bubble.className = 'bubble typing-text';
+      wrap.appendChild(bubble); messages.appendChild(wrap); scrollToBottom();
+      return new Promise(resolve=>{
+        let i = 0;
+        const iv = setInterval(()=> {
+          bubble.textContent += text.charAt(i++);
+          scrollToBottom();
+          if (i >= text.length) { clearInterval(iv); resolve(); }
+        }, speed);
       });
+    }
 
-      // slide-up open / slide-down close animations (no fade)
-      function openPopup(){
-        if(popup.classList.contains('open')) return;
-        // animate popup from below
-        popup.style.pointerEvents = 'auto';
-        anime({
-          targets: popup,
-          translateY: [20, 0],
-          opacity: [0, 1],
-          duration: 420,
-          easing: 'cubicBezier(.17,.67,.2,1)',
-          begin: ()=> popup.classList.add('open')
-        });
-        // hide launcher smoothly (scale down -> visibility hidden)
-        anime({
-          targets: launcher,
-          translateY: [0, 10],
-          scale: [1, 0.95],
-          opacity: [1, 0],
-          duration: 260,
-          easing: 'easeInCubic',
-          complete: ()=> { launcher.style.visibility = 'hidden'; }
-        });
-        setTimeout(()=> input.focus(), 360);
-      }
-
-      function closePopup(){
-        if(!popup.classList.contains('open')) return;
-        // slide down popup
-        anime({
-          targets: popup,
-          translateY: [0, 20],
-          opacity: [1, 0],
-          duration: 360,
-          easing: 'cubicBezier(.17,.67,.2,1)',
-          complete: ()=> {
-            popup.classList.remove('open');
-            popup.style.pointerEvents = 'none';
-          }
-        });
-        // show launcher back
-        launcher.style.visibility = 'visible';
-        anime({ targets: launcher, translateY: [10,0], scale: [0.96,1], opacity: [0,1], duration:360, easing: 'easeOutElastic(1, .6)' });
-      }
-
-      // click handlers
-      launcher.addEventListener('click', (e)=> { e.stopPropagation(); openPopup(); });
-      launcher.addEventListener('keydown', (e)=> { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPopup(); } });
-      closeBtn.addEventListener('click', (e)=> { e.stopPropagation(); closePopup(); });
-
-      // clicking outside popup closes it
-      document.addEventListener('click', (e)=>{
-        if(!popup.contains(e.target) && !launcher.contains(e.target)) closePopup();
+    // ---- initial language chips ----
+    function renderInitial(){
+      if (!messages) return;
+      const outer = document.createElement('div'); outer.className = 'msg ai';
+      const bubble = document.createElement('div'); bubble.className = 'bubble';
+      bubble.innerHTML = `<div style="font-weight:700;margin-bottom:8px">Please select a language</div>`;
+      const caps = document.createElement('div'); caps.style.display='flex'; caps.style.gap='8px';
+      ['English','Hindi','Marathi'].forEach(lang=>{
+        const b = document.createElement('button'); b.className='lang-cap'; b.textContent=lang;
+        b.addEventListener('click', ()=> handleLanguageSelection(lang, b));
+        caps.appendChild(b);
       });
-      popup.addEventListener('click', e=> e.stopPropagation());
-      document.addEventListener('keydown', (e)=> { if(e.key === 'Escape') closePopup(); });
+      bubble.appendChild(caps); outer.appendChild(bubble); messages.appendChild(outer); scrollToBottom();
+    }
 
-      // messaging helpers
-      function scrollToBottom(){
-        messages.scrollTop = messages.scrollHeight + 200;
-      }
-      function addBubble(text, who='ai', withTs=true){
-        const wrap = document.createElement('div');
-        wrap.className = 'msg ' + (who==='user' ? 'user' : 'ai');
-        const bubble = document.createElement('div');
-        bubble.className = 'bubble';
-        bubble.textContent = text;
-        if(withTs){
-          const ts = document.createElement('div');
-          ts.className = 'ts';
-          ts.textContent = new Date().toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'});
-          bubble.appendChild(ts); // <-- timestamp INSIDE bubble
-        }
-        wrap.appendChild(bubble);
-        messages.appendChild(wrap);
-        scrollToBottom();
-        return bubble;
-      }
-      function showTyping(){
-        const wrap = document.createElement('div'); wrap.className = 'msg ai';
-        const bubble = document.createElement('div'); bubble.className = 'bubble';
-        bubble.innerHTML = `
-          <span class="typing-dots">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
-          </span>
-        `;
-        bubble.style.opacity = 0.85;
-        wrap.appendChild(bubble);
-        messages.appendChild(wrap);
-        scrollToBottom();
-        return wrap;
-      }
-      function typeIntoBubble(text, speed=26){
-        const wrap = document.createElement('div'); wrap.className = 'msg ai';
-        const bubble = document.createElement('div'); bubble.className = 'bubble';
-        wrap.appendChild(bubble);
-        messages.appendChild(wrap); scrollToBottom();
-        let i=0;
-        return new Promise(resolve=>{
-          const iv = setInterval(()=>{ bubble.textContent += text.charAt(i++); scrollToBottom(); if(i>=text.length){ clearInterval(iv); resolve(); } }, speed);
-        });
-      }
+    const greetings = {
+      'English': 'Hello! 👋 How can I help you today?',
+      'Hindi': 'नमस्ते! 👋 मैं आपकी कैसे मदद कर सकता/सकती हूँ?',
+      'Marathi': 'नमस्कार! 👋 मी आज तुम्हाला कशी मदत करू शकतो/शकते?'
+    };
+    let currentLang = 'English';
+    function setLanguage(lang){
+      currentLang = lang;
+      if (status) status.textContent = `${lang} • ChatGoD V1`;
+      if (langToggle) { langToggle.textContent = (lang === 'English') ? 'EN | HI' : 'EN | HI'; }
+    }
 
-      // initial prompt: language select quick chips
-      function renderInitial(){
-        const outer = document.createElement('div'); outer.className = 'msg ai';
-        const bubble = document.createElement('div'); bubble.className = 'bubble';
-        bubble.innerHTML = `<div style="font-weight:700;margin-bottom:8px">Please select a language</div>`;
-        const caps = document.createElement('div'); caps.style.display='flex'; caps.style.gap='8px';
-        ['English','Hindi'].forEach(lang=>{
-          const b = document.createElement('button'); b.className='lang-cap'; b.textContent=lang;
-          b.addEventListener('click', ()=> handleLanguageSelection(lang, b));
-          caps.appendChild(b);
-        });
-        bubble.appendChild(caps); outer.appendChild(bubble);
-        messages.appendChild(outer); scrollToBottom();
-      }
+    async function handleLanguageSelection(lang, btnEl){
+      try { anime.timeline({duration:160}).add({targets: btnEl, scale:1.06}).add({targets: btnEl, scale:1}); } catch(e){}
+      setLanguage(lang);
+      addBubble(lang, 'user');
+      document.querySelectorAll('.lang-cap').forEach(x => x.disabled = true);
+      const t = showTyping();
+      await new Promise(r=>setTimeout(r,700));
+      t && t.remove();
+      await typeIntoBubble(greetings[lang] || greetings.English, 26);
+      await new Promise(r=>setTimeout(r,220));
+      const follow = document.createElement('div'); follow.className='msg ai';
+      const fb = document.createElement('div'); fb.className='bubble';
+      fb.innerHTML = `<div style="font-weight:700;margin-bottom:6px">Quick suggestions</div>
+                      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button class="lang-cap suggestion">Ask about placements</button>
+                        <button class="lang-cap suggestion">Find notes</button>
+                        <button class="lang-cap suggestion">Exam tips</button>
+                      </div>`;
+      follow.appendChild(fb); messages.appendChild(follow); scrollToBottom();
+    }
 
-      const greetings = {
-        'English': 'Hello! 👋 How can I help you today?',
-        'Hindi': 'नमस्ते! 👋 मैं आपकी कैसे मदद कर सकता/सकती हूँ?'
-      };
-
-      // language state toggled by header button or chips
-      let currentLang = 'English';
-      function setLanguage(lang){
-        currentLang = lang;
-        status.textContent = `${lang} • ChatGoD V1`;
-        // update header lang toggle label to show active language left
-        langToggle.textContent = (lang === 'English') ? 'EN | HI' : 'EN | HI';
-        // (we keep both visible but currentLang drives replies)
-      }
-
-      async function handleLanguageSelection(lang, btnEl){
-        // quick micro-interaction
-        anime.timeline({duration:160}).add({targets: btnEl, scale:1.06}).add({targets: btnEl, scale:1});
-        setLanguage(lang);
-        addBubble(lang, 'user');
-        // disable chips
-        document.querySelectorAll('.lang-cap').forEach(x => x.disabled = true);
-        const t = showTyping();
-        await new Promise(r=>setTimeout(r,700));
-        t.remove();
-        await typeIntoBubble(greetings[lang] || greetings.English, 26);
-        // quick suggestions after greeting
-        await new Promise(r=>setTimeout(r,220));
-        const follow = document.createElement('div'); follow.className='msg ai';
-        const fb = document.createElement('div'); fb.className='bubble';
-        fb.innerHTML = `<div style="font-weight:700;margin-bottom:6px">Quick suggestions</div>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                          <button class="lang-cap suggestion">Ask about assignments</button>
-                          <button class="lang-cap suggestion">Find notes</button>
-                          <button class="lang-cap suggestion">Exam tips</button>
-                        </div>`;
-        follow.appendChild(fb); messages.appendChild(follow); scrollToBottom();
-      }
-
-      // header language toggle (EN | HI) -> toggles between English and Hindi
-      langToggle.addEventListener('click', ()=>{
+    if (langToggle) {
+      langToggle.addEventListener('click', ()=> {
         setLanguage(currentLang === 'English' ? 'Hindi' : 'English');
-        // give small confirmation message from ai
         const t = showTyping();
-        setTimeout(async ()=> {
-          t.remove();
-          await typeIntoBubble(currentLang === 'English' ? greetings['English'] : greetings['Hindi'], 18);
-        }, 500);
+        setTimeout(async ()=> { t && t.remove(); await typeIntoBubble(currentLang === 'English' ? greetings['English'] : greetings['Hindi'], 18); }, 500);
       });
+    }
 
-      // sending messages (static demo)
-      async function sendUser(text){
-        if(!text || !text.trim()) return;
-        addBubble(text.trim(), 'user');
-        input.value = '';
-        const t = showTyping();
-        await new Promise(r=>setTimeout(r, 600 + Math.min(900, text.length*14)));
-        t.remove();
-        // basic keyword responses
-        const lower = text.toLowerCase();
-        let reply = "Thanks — noted. (static demo reply)";
-        if(lower.includes('hello')||lower.includes('hi')) reply = currentLang==='Hindi' ? 'हैलो! कैसे मदद करूँ?' : 'Hey! How can I help you?';
-        else if(lower.includes('assignment')) reply = currentLang==='Hindi' ? 'असाइनमेंट सेक्शन देखें। क्या नमूने चाहिए?' : "Try checking the 'Assignments' section. Want sample topics?";
-        else if(lower.includes('notes')) reply = currentLang==='Hindi' ? 'आप किस विषय के लिए नोट्स चाहते हैं?' : "Which subject notes are you looking for?";
-        else if(lower.includes('exam')|| lower.includes('tips')) reply = currentLang==='Hindi' ? 'स्मार्ट स्टडी: active recall + spaced repetition.' : 'Study smart: active recall + spaced repetition.';
-        await typeIntoBubble(reply, 22);
+    // ---- NEW: backend integration (sendToAPI) ----
+    async function sendToAPI(queryText){
+      if (!queryText || !queryText.trim()) return;
+      addBubble(queryText.trim(), 'user');
+      if (input) input.value = '';
+      const typingEl = showTyping();
+
+      try {
+        const res = await fetch('/Api/getCollegeData.php', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ auth_token: AUTH_TOKEN, query: queryText, limit: 6 })
+        });
+
+        if (!res.ok) {
+          throw new Error('Network error ' + res.status);
+        }
+        const data = await res.json();
+        typingEl && typingEl.remove();
+
+        if (!data || data.status !== 'ok') {
+          const msg = (data && data.message) ? data.message : 'Unable to fetch results.';
+          await typeIntoBubble('Sorry — ' + msg, 22);
+          return;
+        }
+
+        // friendly top-level summary
+        const count = data.results_count || (data.results ? data.results.length : 0);
+        await typeIntoBubble(`Found ${count} matching record(s) for ${data.college?.CLG_NAME || 'your college'}. Showing top results.`, 20);
+
+        // render each result (up to 3) with snippet and structured info
+        const results = data.results || [];
+        const maxShow = Math.min(3, results.length);
+        for (let i=0;i<maxShow;i++){
+          const r = results[i];
+          // title
+          const title = (r.CLG_BASIC && r.CLG_BASIC.name) ? r.CLG_BASIC.name : (r.DATA_TYPE || 'Information');
+          addStructuredResult(title, r);
+          await new Promise(rp=>setTimeout(rp, 160)); // tiny gap
+        }
+
+        // suggestions (from API)
+        if (Array.isArray(data.suggestions) && data.suggestions.length > 0){
+          renderSuggestions(data.suggestions);
+        } else {
+          renderSuggestions(['Ask about placements','Ask about fees','Ask about hostel']);
+        }
+
+      } catch (err) {
+        typingEl && typingEl.remove();
+        console.error(err);
+        await typeIntoBubble('Sorry — an error occurred while fetching data.', 20);
+      } finally {
+        scrollToBottom();
+      }
+    }
+
+    // helper: add structured result DOM
+    function addStructuredResult(title, r){
+      const wrap = document.createElement('div'); wrap.className = 'msg ai';
+      const b = document.createElement('div'); b.className = 'bubble';
+
+      let html = `<div style="font-weight:800;margin-bottom:6px">${escapeHtml(title)}</div>`;
+      if (r.snippet) html += `<div style="margin-bottom:8px">${escapeHtml(r.snippet)}</div>`;
+
+      // CLG_BASIC detailed_description
+      if (r.CLG_BASIC && r.CLG_BASIC.detailed_description) {
+        html += `<div style="margin-bottom:8px">${escapeHtml(r.CLG_BASIC.detailed_description)}</div>`;
       }
 
-      sendBtn.addEventListener('click', ()=> sendUser(input.value));
-      input.addEventListener('keydown', (e)=> { if(e.key === 'Enter'){ e.preventDefault(); sendUser(input.value); } });
-
-      messages.addEventListener('click', (e)=>{
-        const s = e.target.closest('.suggestion');
-        if(s) sendUser(s.textContent);
-      });
-
-      // initial render
-      renderInitial();
-
-      // live time widget below chats
-      function updateTimeWidget(){
-        const now = new Date();
-        const opts = { hour: '2-digit', minute: '2-digit', hour12: false };
-        timeWidget.textContent = `Local time: ${now.toLocaleTimeString(undefined, opts)}`;
+      // Courses
+      if (r.CLG_COURSES && (r.CLG_COURSES.courses || Array.isArray(r.CLG_COURSES))) {
+        const list = Array.isArray(r.CLG_COURSES.courses) ? r.CLG_COURSES.courses : (Array.isArray(r.CLG_COURSES) ? r.CLG_COURSES : []);
+        if (list.length) {
+          html += `<div style="font-weight:700;margin-top:6px">Courses</div><ul style="margin:6px 0 0 16px;padding:0">`;
+          list.forEach(c => {
+            const nm = c.name || c.course || JSON.stringify(c);
+            const dur = c.duration ? ` — ${escapeHtml(c.duration)}` : '';
+            html += `<li>${escapeHtml(nm)}${dur}</li>`;
+          });
+          html += `</ul>`;
+        }
       }
+
+      // Fees (if present)
+      if (r.CLG_FEES) {
+        try {
+          const fees = r.CLG_FEES;
+          // if fees is object or array, show top-level keys
+          if (typeof fees === 'object' && fees !== null) {
+            html += `<div style="font-weight:700;margin-top:6px">Fees (summary)</div><ul style="margin:6px 0 0 16px;padding:0">`;
+            for (const k in fees) {
+              if (!fees.hasOwnProperty(k)) continue;
+              html += `<li>${escapeHtml(k)}: ${escapeHtml(String(fees[k]))}</li>`;
+            }
+            html += `</ul>`;
+          } else {
+            html += `<div style="margin-top:6px">${escapeHtml(String(fees))}</div>`;
+          }
+        } catch(e){}
+      }
+
+      b.innerHTML = html;
+      wrap.appendChild(b);
+      messages.appendChild(wrap);
+    }
+
+    // helper: render suggestion buttons
+    function renderSuggestions(list){
+      if (!Array.isArray(list) || list.length === 0) return;
+      const follow = document.createElement('div'); follow.className = 'msg ai';
+      const fb = document.createElement('div'); fb.className = 'bubble';
+      let html = '<div style="font-weight:700;margin-bottom:6px">Try one of these</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
+      list.slice(0,8).forEach(s => {
+        html += `<button class="lang-cap suggestion">${escapeHtml(s)}</button>`;
+      });
+      html += '</div>';
+      fb.innerHTML = html; follow.appendChild(fb); messages.appendChild(follow);
+      // attach handlers
+      const nodes = messages.querySelectorAll('.suggestion');
+      nodes.forEach(n => {
+        n.addEventListener('click', ()=> {
+          const txt = n.textContent || n.innerText;
+          sendToAPI(txt);
+        });
+      });
+      scrollToBottom();
+    }
+
+    // escape helper for text inserted into innerHTML in minimal capacity
+    function escapeHtml(str){
+      if (typeof str !== 'string') return String(str);
+      return str.replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+    }
+
+    // ---- replace old sendUser with sendToAPI wiring ----
+    sendBtn && sendBtn.addEventListener('click', ()=> sendToAPI(input ? input.value : ''));
+    input && input.addEventListener('keydown', (e)=> { if (e.key === 'Enter'){ e.preventDefault(); sendToAPI(input.value); } });
+
+    // delegate suggestion clicks (legacy)
+    messages && messages.addEventListener('click', (e)=> {
+      const s = e.target.closest('.suggestion');
+      if (s) sendToAPI(s.textContent || s.innerText);
+    });
+
+    // initial render + time
+    renderInitial();
+    if (timeWidget){
+      function updateTimeWidget(){ const now = new Date(); const opts = { hour:'2-digit', minute:'2-digit', hour12:false }; timeWidget.textContent = `Local time: ${now.toLocaleTimeString(undefined, opts)}`; }
       updateTimeWidget(); setInterval(updateTimeWidget, 30_000);
+    }
 
-      // initial small attention animation for launcher
-      setInterval(()=> anime({ targets: '#chatLauncher', scale:[1,1.06,1], duration:3000, easing:'easeInOutSine' }), 9000);
+    // launcher pulse
+    setInterval(()=> anime({ targets: '#chatLauncher', scale:[1,1.06,1], duration:3000, easing:'easeInOutSine' }), 9000);
 
-      // accessibility: keyboard open
-      launcher.addEventListener('keydown', (e)=> { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPopup(); } });
+    // accessibility
+    launcher && launcher.addEventListener('keydown', (e)=> { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPopup(); } });
 
-      // ensure scroll anchored
-      messages.scrollTop = messages.scrollHeight;
+    // ensure anchor scroll
+    if (messages) messages.scrollTop = messages.scrollHeight;
 
-    })();
-  </script>
+    // Expose sendToAPI for debugging
+    window.ChatGoD = window.ChatGoD || {};
+    window.ChatGoD.sendToAPI = sendToAPI;
+  })();
+</script>
+
 </body>
 </html>
