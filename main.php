@@ -599,7 +599,6 @@
       }
 
       // attach handlers
-      document.querySelectorAll('.suggestion').forEach(el=>el.addEventListener('click', ()=> sendToAPI(el.textContent)));
     }
 
     if (langToggle) {
@@ -795,14 +794,6 @@
       });
       html += '</div>';
       fb.innerHTML = html; follow.appendChild(fb); messages.appendChild(follow);
-      // attach handlers
-      const nodes = messages.querySelectorAll('.suggestion');
-      nodes.forEach(n => {
-        n.addEventListener('click', ()=> {
-          const txt = n.textContent || n.innerText;
-          sendToAPI(txt);
-        });
-      });
       scrollToBottom();
     }
 
