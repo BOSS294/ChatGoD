@@ -25,6 +25,18 @@ ini_set('display_startup_errors', '1');
 error_reporting(E_ALL);
 header('Content-Type: application/json; charset=utf-8');
 
+if (!function_exists('apcu_fetch')) {
+    function apcu_fetch($key, &$success = null) {
+        $success = false;
+        return false;
+    }
+}
+if (!function_exists('apcu_store')) {
+    function apcu_store($key, $var, $ttl = 0) {
+        return false;
+    }
+}
+
 require_once __DIR__ . '/../Connectors/connector.php';
 use ChatGoD\Connector;
 
@@ -283,19 +295,76 @@ try {
         foreach ($rows as $r) {
             $basic = !empty($r['CLG_BASIC']) ? json_decode($r['CLG_BASIC'], true) : null;
             $snippet = '';
-            if (!empty($r['SEARCH_TEXT'])) {
-                $text = $r['SEARCH_TEXT'];
-                $pos = null;
-                foreach ($keywords as $kw) {
-                    $p = mb_stripos($text, $kw, 0, 'UTF-8');
-                    if ($p !== false) { $pos = $p; break; }
-                }
-                if ($pos === null) $snippet = mb_substr($text, 0, 220, 'UTF-8');
-                else {
-                    $start = max(0, $pos - 80);
-                    $snippet = ($start > 0 ? '...' : '') . mb_substr($text, $start, 200, 'UTF-8') . (mb_strlen($text) > $start + 200 ? '...' : '');
-                }
+
+            switch ($r['DATA_TYPE']) {
+                case 'DEPARTMENTS':
+                    $depts = !empty($r['CLG_DEPARTMENTS']) ? json_decode($r['CLG_DEPARTMENTS'], true) : null;
+                    if (isset($depts['departments']) && is_array($depts['departments'])) {
+                        $lines = [];
+                        foreach ($depts['departments'] as $d) {
+                            $labs = isset($d['labs']) && is_array($d['labs']) ? implode(', ', $d['labs']) : '';
+                            $lines[] = "{$d['name']} (HOD: {$d['hod']}, Faculty: {$d['faculty_count']}" . ($labs ? ", Labs: {$labs}" : "") . ")";
+                        }
+                        $snippet = implode("; ", $lines);
+                    }
+                    break;
+
+                case 'COURSES':
+                    $courses = !empty($r['CLG_COURSES']) ? json_decode($r['CLG_COURSES'], true) : null;
+                    if (isset($courses['courses']) && is_array($courses['courses'])) {
+                        $lines = [];
+                        foreach ($courses['courses'] as $c) {
+                            $lines[] = "{$c['name']} ({$c['duration']} yrs, Fees: {$c['fees']})";
+                        }
+                        $snippet = implode("; ", $lines);
+                    }
+                    break;
+
+                case 'FEES':
+                    $fees = !empty($r['CLG_FEES']) ? json_decode($r['CLG_FEES'], true) : null;
+                    if (is_array($fees)) {
+                        $lines = [];
+                        foreach ($fees as $f) {
+                            $lines[] = "{$f['course']}: ₹{$f['amount']} per year";
+                        }
+                        $snippet = implode("; ", $lines);
+                    }
+                    break;
+
+                case 'LOCATIONS':
+                    $locs = !empty($r['CLG_LOCATIONS']) ? json_decode($r['CLG_LOCATIONS'], true) : null;
+                    if (is_array($locs)) {
+                        $lines = [];
+                        foreach ($locs as $l) {
+                            $lines[] = "{$l['campus']} ({$l['address']})";
+                        }
+                        $snippet = implode("; ", $lines);
+                    }
+                    break;
+
+                case 'BASIC':
+                    if (is_array($basic)) {
+                        $snippet = "{$basic['name']} — {$basic['desc']}";
+                    }
+                    break;
+
+                default:
+                    // fallback to SEARCH_TEXT
+                    if (!empty($r['SEARCH_TEXT'])) {
+                        $text = $r['SEARCH_TEXT'];
+                        $pos = null;
+                        foreach ($keywords as $kw) {
+                            $p = mb_stripos($text, $kw, 0, 'UTF-8');
+                            if ($p !== false) { $pos = $p; break; }
+                        }
+                        if ($pos === null) $snippet = mb_substr($text, 0, 220, 'UTF-8');
+                        else {
+                            $start = max(0, $pos - 80);
+                            $snippet = ($start > 0 ? '...' : '') . mb_substr($text, $start, 200, 'UTF-8') . (mb_strlen($text) > $start + 200 ? '...' : '');
+                        }
+                    }
             }
+
             $results[] = [
                 'DATAID' => $r['DATAID'],
                 'DATA_TYPE' => $r['DATA_TYPE'],
