@@ -119,7 +119,7 @@ function uuid_v4(): string {
     return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
 }
 
-/** Get client IP (handles common proxy headers but do NOT trust blindly) */
+/** Get client IP (handles common proxy headers) */
 function client_ip(): string {
     $headers = [
         'HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_FORWARDED',
@@ -136,7 +136,24 @@ function client_ip(): string {
     return '0.0.0.0';
 }
 
-/** Capture a plain-text stack trace (safe for logs) */
+
+/**
+ * capture_stack_trace
+ *
+ * Captures and returns a plain-text stack trace of the current call stack, skipping a specified number of initial frames.
+ *
+ * @param int $offset Number of initial stack frames to skip (default: 0).
+ * @return string Multi-line string, each line representing a function call in the format "Class::Function() — file:line".
+ *
+ * Usage:
+ *   $trace = capture_stack_trace();         // Get full stack trace
+ *   $trace = capture_stack_trace(2);        // Skip first 2 frames (useful for logging context)
+ *
+ * Notes:
+ * - Uses PHP's debug_backtrace with DEBUG_BACKTRACE_IGNORE_ARGS for performance and privacy.
+ * - Limits output to 50 frames to avoid excessive log size.
+ * - Useful for logging, debugging, and error reporting.
+ */
 function capture_stack_trace(int $offset = 0): string {
     $bt = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
     $out = [];
@@ -151,7 +168,6 @@ function capture_stack_trace(int $offset = 0): string {
     }
     return implode("\n", $out);
 }
-
 // ----------------------------- Webhook Alerting helper (no email) ----------------------------- //
 
 /**

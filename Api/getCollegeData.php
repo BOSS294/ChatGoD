@@ -1,22 +1,72 @@
 <?php
 /**
- * Api/getCollegeData.php
- *
- * ChatGoD — College data search API (v1.2.1 -> v1.3.0)
- * Improvements:
- *  - Greeting / pleasantry fast-path responses
- *  - APCu / file caching for repeated queries
- *  - Improved QA ranking (overlap + levenshtein + precomputed RANK_SCORE)
- *  - More robust QA fallback (LIKE + optional FULLTEXT attempt)
- *  - Defensive guards and clearer JSON encoding
- *
- * Usage
- *  POST JSON:
- *    { "auth_token": "<token>", "query": "placements and fees", "limit": 6 }
- *
+ * ChatGoD College Data Search API
+ * --------------------------------
+ * File: Api/getCollegeData.php
  * Version: 1.3.0
- * Author: ChatGoD Labs (updated)
- * Last updated: <?php echo date('Y-m-d'); ?>
+ * Author: Mayank Chawdhari ( AKA BOSS294 )
+ * Last updated: Mai nahi btaunga :P
+ *
+ * DESCRIPTION:
+ * This API endpoint provides secure, structured access to college data for ChatGoD clients.
+ * It supports natural language queries about placements, fees, hostels, courses, departments, locations, and more.
+ * The API is designed for chatbot and web integrations, returning rich, context-aware results.
+ *
+ * MAIN FEATURES:
+ * - Authenticated access: Requires a valid college auth token.
+ * - Query normalization and keyword extraction for robust search.
+ * - Multi-stage search:
+ *     1. Fast-path greetings/pleasantries (returns canned responses for "hi", "hello", etc.)
+ *     2. Full-text search (MATCH ... AGAINST) for relevant college data.
+ *     3. Fallback to LIKE-based search if full-text yields no results.
+ *     4. QA fallback: Searches college_qa_suggestions for matching Q&A if no data found.
+ * - Advanced QA ranking: Uses keyword overlap, Levenshtein similarity, and precomputed scores.
+ * - Caching: Uses APCu or file-based cache to reduce DB load for repeated queries.
+ * - Defensive error handling: Returns clear JSON error messages and logs context for debugging.
+ * - Structured results: Each result includes decoded JSON fields for departments, courses, fees, locations, etc.
+ * - Detailed snippets: For each result, generates a human-readable summary (department details, course info, fee breakdown, etc.).
+ * - Suggestions: Returns suggested follow-up queries based on college data.
+ * - Logging: All errors and important events are logged with context (IP, SQL, params).
+ *
+ * USAGE:
+ *   POST JSON to this endpoint:
+ *     {
+ *       "auth_token": "<college token>",
+ *       "query": "placements and fees",
+ *       "limit": 6
+ *     }
+ *   Returns:
+ *     {
+ *       "status": "ok",
+ *       "college": { ... },
+ *       "query": "...",
+ *       "normalized_query": "...",
+ *       "extracted_keywords": [ ... ],
+ *       "results_count": N,
+ *       "results": [ ... ],
+ *       "suggestions": [ ... ]
+ *     }
+ *
+ * SECURITY:
+ * - Only active colleges with valid tokens can access data.
+ * - All inputs are sanitized and validated.
+ * - Errors do not leak sensitive information in production.
+ *
+ *
+ * DEPENDENCIES:
+ * - Requires Connectors/connector.php for DB connection and logging.
+ * - APCu (optional) for caching.
+ *
+ * TYPICAL FLOW:
+ * 1. Validate input and auth token.
+ * 2. Normalize query and extract keywords.
+ * 3. Check for greeting/pleasantry fast-path.
+ * 4. Try cache; if not found, run full-text search.
+ * 5. If no results, run LIKE fallback.
+ * 6. If still no results, run QA fallback.
+ * 7. Assemble results, generate snippets, and return structured JSON.
+ * 8. Log errors and cache results as needed.
+ *
  */
 
 declare(strict_types=1);
