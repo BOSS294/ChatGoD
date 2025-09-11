@@ -80,6 +80,150 @@
     }
     .chat-launcher:focus{outline:2px solid rgba(255,255,255,0.06)}
     .chat-launcher:hover{transform: translateY(-4px) scale(1.02)}
+    /* ChatGoD — correction / suggestion / feedback button styles
+      No CSS variables used — paste into your widget stylesheet or <style> tag. */
+
+    /* Base color palette (explicit values) */
+    :where(.cg-style-placeholder) { /* no-op selector to document palette in-file */
+      /* accent: #2563eb; user-bg: #34d399; messages-bg: #071126; text: #ffffff;
+        muted: rgba(255,255,255,0.72); danger: #ef4444; success: #10b981;
+        surface: rgba(255,255,255,0.04); radius: 12px; */
+    }
+
+    /* Base pill button used for suggestions & corrections */
+    .lang-cap,
+    .suggestion-btn,
+    .qa-btn,
+    .accept-correction,
+    .ignore-correction {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      line-height: 1;
+      border-radius: 999px;
+      cursor: pointer;
+      user-select: none;
+      border: 1px solid transparent;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      color: #ffffff;
+      box-shadow: 0 4px 10px rgba(2,6,23,0.45);
+      transition: transform .14s ease, box-shadow .14s ease, background .14s ease;
+      white-space: nowrap;
+    }
+
+    /* Primary actionable pill (accept corrected query / primary suggestions) */
+    .accept-correction,
+    .suggestion-btn {
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.06));
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .accept-correction {
+      background-color: #2563eb; /* accent */
+      color: #ffffff;
+      border-color: rgba(255,255,255,0.08);
+      box-shadow: 0 6px 18px rgba(37,99,235,0.18);
+      font-weight: 600;
+    }
+
+    /* Secondary (less-prominent) pill for ignoring corrections */
+    .ignore-correction {
+      background: transparent;
+      color: rgba(255,255,255,0.72); /* muted */
+      border: 1px dashed rgba(255,255,255,0.06);
+      font-weight: 500;
+    }
+
+    /* QA buttons (question suggestions) — slightly larger to stand out */
+    .qa-btn {
+      padding: 10px 14px;
+      font-size: 13px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border: 1px solid rgba(255,255,255,0.04);
+      color: #ffffff;
+    }
+
+    /* Hover / active states */
+    .lang-cap:hover,
+    .suggestion-btn:hover,
+    .qa-btn:hover,
+    .accept-correction:hover,
+    .ignore-correction:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 20px rgba(2,6,23,0.45);
+      opacity: 0.98;
+    }
+
+    /* Focus accessibility */
+    .lang-cap:focus,
+    .suggestion-btn:focus,
+    .qa-btn:focus,
+    .accept-correction:focus,
+    .ignore-correction:focus,
+    .feedback-btn:focus {
+      outline: none;
+      box-shadow: 0 0 0 4px rgba(37,99,235,0.16); /* subtle blue focus ring */
+      transform: translateY(-2px);
+    }
+
+    /* Feedback small circular buttons (thumbs up / down) */
+    .feedback-btn {
+      border: none;
+      background: #f3f4f6;
+      color: #888;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      font-size: 18px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+      position: relative;
+      outline: none;
+    }
+    .feedback-btn:hover {
+      background: #e0e7ef;
+      color: #2563eb;
+      box-shadow: 0 2px 8px rgba(37,99,235,0.08);
+    }
+    .feedback-btn:active {
+      background: #2563eb;
+      color: #fff;
+      box-shadow: 0 2px 12px rgba(37,99,235,0.18);
+    }
+    .feedback-btn.selected {
+      background: #22c55e;
+      color: #fff;
+      box-shadow: 0 0 0 2px #22c55e;
+    }
+    .feedback-btn .tick {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 14px;
+      height: 14px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feedback-btn.selected .tick {
+      opacity: 1;
+      animation: tickPop 0.5s cubic-bezier(.68,-0.55,.27,1.55);
+    }
+    @keyframes tickPop {
+      0% { transform: scale(0.2); opacity: 0; }
+      60% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Small responsive tweak for tiny screens */
+    @media (max-width:420px) {
+      .lang-cap, .suggestion-btn, .qa-btn, .accept-correction, .ignore-correction {
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+      .feedback-btn { width:34px; height:34px; font-size:15px; }
+    }
 
     /* popup container */
     .chat-popup{
@@ -480,6 +624,70 @@
         }, speed);
       });
     }
+    // send an event (click / feedback) to the API for online learning
+    async function sendEvent({ event, result_id = null, result_type = null, feedback = null, query = null }) {
+      try {
+        const payload = { auth_token: AUTH_TOKEN, event };
+        if (result_id) payload.result_id = String(result_id);
+        if (result_type) payload.result_type = String(result_type);
+        if (feedback !== null) payload.feedback = Number(feedback);
+        if (query) payload.query = String(query);
+        // no need to await response body strictly; we log errors if any
+        const res = await fetch('/Api/getCollegeData.php', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          console.warn('sendEvent failed', res.status);
+        }
+        return res;
+      } catch (err) {
+        console.error('sendEvent error', err);
+      }
+    }
+
+    // Render QA list (nearest_qa) with IDs and attach handlers
+    function renderNearestQA(qaList) {
+      if (!Array.isArray(qaList) || qaList.length === 0) return;
+      const follow = document.createElement('div'); follow.className = 'msg ai';
+      const fb = document.createElement('div'); fb.className = 'bubble';
+      let html = '<div style="font-weight:700;margin-bottom:6px">Related questions</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
+      qaList.slice(0,8).forEach(q => {
+        // include data-id for click tracking
+        const qText = escapeHtml(q.question || q);
+        html += `<button class="lang-cap suggestion qa-btn" data-qa-id="${escapeHtml(String(q.id || ''))}">${qText}</button>`;
+      });
+      html += '</div>';
+      fb.innerHTML = html; follow.appendChild(fb); messages.appendChild(follow);
+      scrollToBottom();
+    }
+
+    // Render corrected query bubble ("Did you mean ...?")
+    function renderCorrectedQuery(corrected, original) {
+      if (!corrected || corrected.trim() === '') return;
+      const follow = document.createElement('div'); follow.className = 'msg ai';
+      const fb = document.createElement('div'); fb.className = 'bubble';
+      // small accept/ignore buttons
+      fb.innerHTML = `<div style="font-weight:700;margin-bottom:6px">Did you mean?</div>
+                      <div style="display:flex;gap:8px;align-items:center">
+                        <button class="lang-cap accept-correction">${escapeHtml(corrected)}</button>
+                        <button class="lang-cap ignore-correction">No, keep "${escapeHtml(original)}"</button>
+                      </div>`;
+      follow.appendChild(fb); messages.appendChild(follow); scrollToBottom();
+    }
+
+    // Add feedback UI (thumbs up/down) next to a specific ai bubble element
+    function attachFeedbackControls(containerEl, resultId, resultType) {
+      if (!containerEl || !resultId) return;
+      const ctrl = document.createElement('div');
+      ctrl.style.marginTop = '8px';
+      ctrl.innerHTML = `
+        <button class="feedback-btn" data-res-id="${escapeHtml(String(resultId))}" data-res-type="${escapeHtml(String(resultType))}" data-feedback="1">👍</button>
+        <button class="feedback-btn" data-res-id="${escapeHtml(String(resultId))}" data-res-type="${escapeHtml(String(resultType))}" data-feedback="-1">👎</button>
+      `;
+      containerEl.appendChild(ctrl);
+    }
 
     // ---- translation helpers ----
     async function translateText(text, targetLangCode='en') {
@@ -608,134 +816,146 @@
         setTimeout(async ()=> { t && t.remove(); await showTranslatedAndType(currentLang === 'English' ? greetings['English'] : greetings['Hindi'], 18); }, 500);
       });
     }
+    document.querySelectorAll('.feedback-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.feedback-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    // Optionally send feedback to backend here
+  });
+});
+async function sendToAPI(queryText){
+  if (!queryText || !queryText.trim()) return;
+  addBubble(queryText.trim(), 'user');
+  if (input) input.value = '';
+  const typingEl = showTyping();
 
-    // Main Executable File 
-    async function sendToAPI(queryText){ 
-      if (!queryText || !queryText.trim()) return;
-      addBubble(queryText.trim(), 'user');
-      if (input) input.value = '';
-      const typingEl = showTyping();
+  try {
+    const res = await fetch('/Api/getCollegeData.php', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ auth_token: AUTH_TOKEN, query: queryText, limit: 6 })
+    });
 
-      try {
-        const res = await fetch('/Api/getCollegeData.php', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ auth_token: AUTH_TOKEN, query: queryText, limit: 6 })
-        });
+    if (!res.ok) throw new Error('Network error ' + res.status);
+    const data = await res.json();
+    typingEl && typingEl.remove();
 
-        if (!res.ok) throw new Error('Network error ' + res.status);
-        const data = await res.json();
-        typingEl && typingEl.remove();
-
-        if (!data || data.status !== 'ok') {
-          const msg = (data && data.message) ? data.message : 'Unable to fetch results.';
-          await showTranslatedAndType('Sorry — ' + msg, 22);
-          return;
-        }
-
-        // CASE A: direct matched results -> pick best result and show its answer (typewriter)
-        if (Array.isArray(data.results) && data.results.length > 0) {
-          const top = data.results[0];
-
-          // Prefer presenting: CLG_BASIC.detailed_description -> snippet -> custom answer
-          let mainText = '';
-          if (top.CLG_BASIC && top.CLG_BASIC.detailed_description) mainText = top.CLG_BASIC.detailed_description;
-          else if (top.snippet) mainText = top.snippet;
-          else if (top.CLG_BASIC && top.CLG_BASIC.short_description) mainText = top.CLG_BASIC.short_description;
-          else mainText = 'Here is some information I found.';
-
-          // show main response using typing animation only (translated if needed)
-          await showTranslatedAndType(mainText, 22);
-
-          // then render structured parts as normal bubbles (courses/faqs) — translate labels & items where possible
-          // COURSES
-          if (top.CLG_COURSES && (top.CLG_COURSES.courses || Array.isArray(top.CLG_COURSES))) {
-            const list = Array.isArray(top.CLG_COURSES.courses) ? top.CLG_COURSES.courses : (Array.isArray(top.CLG_COURSES) ? top.CLG_COURSES : []);
-            if (list.length) {
-              const wrap = document.createElement('div'); wrap.className = 'msg ai';
-              const b = document.createElement('div'); b.className = 'bubble';
-              let html = '<div style="font-weight:700;margin-bottom:6px">Courses</div><ul style="margin:0;padding-left:18px">';
-              for (const c of list) {
-                const nm = c.name || c.course || JSON.stringify(c);
-                const dur = c.duration ? ` — ${c.duration}` : '';
-                // translate course name if needed
-                let itemText = nm + (dur ? dur : '');
-                if ((LANG_CODE[currentLang] || 'en') !== 'en' && TRANSLATE_ENABLED) {
-                  try { itemText = await translateText(itemText, LANG_CODE[currentLang]); } catch(e){ /* ignore */ }
-                }
-                html += `<li>${escapeHtml(itemText)}</li>`;
-              }
-              html += '</ul>';
-              b.innerHTML = html; wrap.appendChild(b); messages.appendChild(wrap);
-            }
-          }
-
-          // FAQ
-          if (top.CLG_BASIC && Array.isArray(top.CLG_BASIC.faqs) && top.CLG_BASIC.faqs.length) {
-            const wrap = document.createElement('div'); wrap.className = 'msg ai';
-            const b = document.createElement('div'); b.className = 'bubble';
-            let html = '<div style="font-weight:700;margin-bottom:6px">FAQs</div>';
-            const faqs = top.CLG_BASIC.faqs.slice(0,3);
-            for (const f of faqs) {
-              let q = f.q || '';
-              let a = f.a || '';
-              if ((LANG_CODE[currentLang] || 'en') !== 'en' && TRANSLATE_ENABLED) {
-                try {
-                  [q, a] = await Promise.all([translateText(q, LANG_CODE[currentLang]), translateText(a, LANG_CODE[currentLang])]);
-                } catch(e) {}
-              }
-              html += `<div style="margin-bottom:6px"><strong>${escapeHtml(q)}</strong><div>${escapeHtml(a)}</div></div>`;
-            }
-            b.innerHTML = html; wrap.appendChild(b); messages.appendChild(wrap);
-          }
-
-          // finally suggestions (translate then render)
-          if (Array.isArray(data.suggestions) && data.suggestions.length) {
-            await translateSuggestionsAndRender(data.suggestions);
-          }
-          return;
-        }
-
-        // CASE B: no direct results -> API returned nearest_qa OR nearest_suggestions
-        if (Array.isArray(data.nearest_qa) && data.nearest_qa.length) {
-          // present top nearest QA answer using typing animation (translate)
-          const qa = data.nearest_qa[0];
-          const mainText = qa.answer || qa.question || 'I found something related: ' + (qa.question || '');
-          await showTranslatedAndType(mainText, 22);
-
-          // show question buttons (nearest QA) below — translate questions labels
-          const questions = data.nearest_qa.slice(0,6).map(q => q.question || '');
-          if (questions.length) {
-            // translate questions if necessary then render as suggestion buttons
-            if ((LANG_CODE[currentLang] || 'en') !== 'en' && TRANSLATE_ENABLED) {
-              const translatedQs = await Promise.all(questions.map(q => translateText(q, LANG_CODE[currentLang])));
-              renderSuggestions(translatedQs);
-            } else {
-              renderSuggestions(questions);
-            }
-          }
-
-          return;
-        }
-
-        // CASE C: no qa either -> show nearest_suggestions (buttons). Use one typed line only
-        if (Array.isArray(data.nearest_suggestions) && data.nearest_suggestions.length) {
-          await showTranslatedAndType('I could not find an exact match. You can try one of these:', 22);
-          await translateSuggestionsAndRender(data.nearest_suggestions);
-          return;
-        }
-
-        // final fallback
-        await showTranslatedAndType('Sorry, I could not find relevant information. Try asking about placements, fees, or hostel.', 22);
-
-      } catch (err) {
-        typingEl && typingEl.remove();
-        console.error(err);
-        await showTranslatedAndType('Sorry — an error occurred while fetching data.', 20);
-      } finally {
-        scrollToBottom();
-      }
+    if (!data || data.status !== 'ok') {
+      const msg = (data && data.message) ? data.message : 'Unable to fetch results.';
+      await showTranslatedAndType('Sorry — ' + msg, 22);
+      return;
     }
+
+    // If corrected query present, show "Did you mean?"
+    if (data.corrected_query && data.corrected_query !== data.normalized_query) {
+      renderCorrectedQuery(data.corrected_query, data.query || queryText);
+    }
+
+    // show confidence note if provided
+    if (data.meta && typeof data.meta.confidence !== 'undefined') {
+      const confMsg = `Confidence: ${Math.round((data.meta.confidence || 0) * 100)}%`;
+      const wrap = document.createElement('div'); wrap.className = 'msg ai';
+      const b = document.createElement('div'); b.className = 'bubble';
+      b.textContent = confMsg;
+      wrap.appendChild(b); messages.appendChild(wrap); scrollToBottom();
+    }
+
+    // CASE: direct results
+    if (Array.isArray(data.results) && data.results.length > 0) {
+      const top = data.results[0];
+      let mainText = '';
+      if (top.CLG_BASIC && top.CLG_BASIC.detailed_description) mainText = top.CLG_BASIC.detailed_description;
+      else if (top.snippet) mainText = top.snippet;
+      else if (top.CLG_BASIC && top.CLG_BASIC.short_description) mainText = top.CLG_BASIC.short_description;
+      else mainText = 'Here is some information I found.';
+
+      // type main answer
+      await showTranslatedAndType(mainText, 22);
+
+      // attach feedback controls to the last AI bubble
+      const lastAi = messages.querySelector('.msg.ai:last-child .bubble');
+      if (lastAi) {
+        // for DATA results we have DATAID; attach controls
+        if (top.DATAID) attachFeedbackControls(lastAi, top.DATAID, 'DATA');
+        // if top came from QA inside CLG_BASIC then attach with QA id if available (no standard id here)
+      }
+
+      // structured display (courses, faqs)
+      if (top.CLG_COURSES && (top.CLG_COURSES.courses || Array.isArray(top.CLG_COURSES))) {
+        const list = Array.isArray(top.CLG_COURSES.courses) ? top.CLG_COURSES.courses : (Array.isArray(top.CLG_COURSES) ? top.CLG_COURSES : []);
+        if (list.length) {
+          const wrap = document.createElement('div'); wrap.className = 'msg ai';
+          const b = document.createElement('div'); b.className = 'bubble';
+          let html = '<div style="font-weight:700;margin-bottom:6px">Courses</div><ul style="margin:0;padding-left:18px">';
+          for (const c of list) {
+            const nm = c.name || c.course || JSON.stringify(c);
+            const dur = c.duration ? ` — ${c.duration}` : '';
+            let itemText = nm + (dur ? dur : '');
+            if ((LANG_CODE[currentLang] || 'en') !== 'en' && TRANSLATE_ENABLED) {
+              try { itemText = await translateText(itemText, LANG_CODE[currentLang]); } catch(e){ /* ignore */ }
+            }
+            html += `<li>${escapeHtml(itemText)}</li>`;
+          }
+          html += '</ul>';
+          b.innerHTML = html; wrap.appendChild(b); messages.appendChild(wrap);
+        }
+      }
+
+      if (top.CLG_BASIC && Array.isArray(top.CLG_BASIC.faqs) && top.CLG_BASIC.faqs.length) {
+        const wrap = document.createElement('div'); wrap.className = 'msg ai';
+        const b = document.createElement('div'); b.className = 'bubble';
+        let html = '<div style="font-weight:700;margin-bottom:6px">FAQs</div>';
+        const faqs = top.CLG_BASIC.faqs.slice(0,3);
+        for (const f of faqs) {
+          let q = f.q || ''; let a = f.a || '';
+          if ((LANG_CODE[currentLang] || 'en') !== 'en' && TRANSLATE_ENABLED) {
+            try { [q,a] = await Promise.all([translateText(q, LANG_CODE[currentLang]), translateText(a, LANG_CODE[currentLang])]); } catch(e) {}
+          }
+          html += `<div style="margin-bottom:6px"><strong>${escapeHtml(q)}</strong><div>${escapeHtml(a)}</div></div>`;
+        }
+        b.innerHTML = html; wrap.appendChild(b); messages.appendChild(wrap);
+      }
+
+      // render suggestions
+      if (Array.isArray(data.suggestions) && data.suggestions.length) {
+        await translateSuggestionsAndRender(data.suggestions);
+      }
+      return;
+    }
+
+    // CASE: nearest QA present
+    if (Array.isArray(data.nearest_qa) && data.nearest_qa.length) {
+      const qaTop = data.nearest_qa[0];
+      const mainText = qaTop.answer || qaTop.question || ('I found something related: ' + (qaTop.question||''));
+      await showTranslatedAndType(mainText, 22);
+
+      // attach feedback for QA top answer (if id available)
+      const lastAi = messages.querySelector('.msg.ai:last-child .bubble');
+      if (lastAi && qaTop.id) attachFeedbackControls(lastAi, qaTop.id, 'QA');
+
+      // render QA suggestions list (buttons with IDs)
+      renderNearestQA(data.nearest_qa);
+      return;
+    }
+
+    // CASE: nearest_suggestions
+    if (Array.isArray(data.nearest_suggestions) && data.nearest_suggestions.length) {
+      await showTranslatedAndType('I could not find an exact match. You can try one of these:', 22);
+      await translateSuggestionsAndRender(data.nearest_suggestions);
+      return;
+    }
+
+    // fallback
+    await showTranslatedAndType('Sorry, I could not find relevant information. Try asking about placements, fees, or hostel.', 22);
+
+  } catch (err) {
+    typingEl && typingEl.remove();
+    console.error(err);
+    await showTranslatedAndType('Sorry — an error occurred while fetching data.', 20);
+  } finally {
+    scrollToBottom();
+  }
+}
 
     // helper: add structured result DOM (kept for potential other uses)
     function addStructuredResult(title, r){
@@ -782,20 +1002,20 @@
       wrap.appendChild(b);
       messages.appendChild(wrap);
     }
-
-    // helper: render suggestion buttons
     function renderSuggestions(list){
       if (!Array.isArray(list) || list.length === 0) return;
       const follow = document.createElement('div'); follow.className = 'msg ai';
       const fb = document.createElement('div'); fb.className = 'bubble';
       let html = '<div style="font-weight:700;margin-bottom:6px">Try one of these</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
-      list.slice(0,8).forEach(s => {
-        html += `<button class="lang-cap suggestion">${escapeHtml(s)}</button>`;
+      list.slice(0,8).forEach((s, idx) => {
+        // include index so we can track suggestion clicks
+        html += `<button class="lang-cap suggestion suggestion-btn" data-sugg-idx="${idx}">${escapeHtml(s)}</button>`;
       });
       html += '</div>';
       fb.innerHTML = html; follow.appendChild(fb); messages.appendChild(follow);
       scrollToBottom();
     }
+
 
     // escape helper for text inserted into innerHTML in minimal capacity
     function escapeHtml(str){
@@ -807,11 +1027,59 @@
     sendBtn && sendBtn.addEventListener('click', ()=> sendToAPI(input ? input.value : ''));
     input && input.addEventListener('keydown', (e)=> { if (e.key === 'Enter'){ e.preventDefault(); sendToAPI(input.value); } });
 
-    // delegate suggestion clicks (legacy)
-    messages && messages.addEventListener('click', (e)=> {
-      const s = e.target.closest('.suggestion');
-      if (s) sendToAPI(s.textContent || s.innerText);
-    });
+      messages && messages.addEventListener('click', async (e) => {
+        const suggestionBtn = e.target.closest('.suggestion-btn');
+        const qaBtn = e.target.closest('.qa-btn');
+        const acceptCorr = e.target.closest('.accept-correction');
+        const ignoreCorr = e.target.closest('.ignore-correction');
+        const feedbackBtn = e.target.closest('.feedback-btn');
+
+        if (suggestionBtn) {
+          const text = suggestionBtn.textContent || suggestionBtn.innerText;
+          // send suggestion click event (no result_id) for learning
+          sendEvent({ event: 'click', result_type: 'SUGGESTION', query: text });
+          sendToAPI(text);
+          return;
+        }
+
+        if (qaBtn) {
+          const qText = qaBtn.textContent || qaBtn.innerText;
+          const qaId = qaBtn.getAttribute('data-qa-id') || null;
+          // log click with QA id, then query the QA text
+          if (qaId) sendEvent({ event: 'click', result_id: qaId, result_type: 'QA', query: qText });
+          sendToAPI(qText);
+          return;
+        }
+
+        if (acceptCorr) {
+          const corrected = acceptCorr.textContent || acceptCorr.innerText;
+          // re-run query with corrected string and log that user accepted suggestion
+          sendEvent({ event: 'click', result_type: 'CORRECTION', query: corrected });
+          sendToAPI(corrected);
+          return;
+        }
+        if (ignoreCorr) {
+          // simply remove the correction bubble (user ignored)
+          const wrap = ignoreCorr.closest('.msg.ai');
+          if (wrap) wrap.remove();
+          return;
+        }
+
+        if (feedbackBtn) {
+          const rid = feedbackBtn.getAttribute('data-res-id');
+          const rtype = feedbackBtn.getAttribute('data-res-type');
+          const fb = Number(feedbackBtn.getAttribute('data-feedback') || 0);
+          if (rid) {
+            sendEvent({ event: 'feedback', result_id: rid, result_type: rtype, feedback: fb })
+              .then(()=> {
+                // give immediate UI ack
+                feedbackBtn.textContent = (fb === 1 ? 'Thanks' : 'Noted');
+                setTimeout(()=> { if (feedbackBtn) feedbackBtn.textContent = (fb === 1 ? '👍' : '👎'); }, 1400);
+              });
+          }
+          return;
+        }
+      });
 
     // initial render + time
     renderInitial();

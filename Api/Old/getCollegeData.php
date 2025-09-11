@@ -3,18 +3,70 @@
  * ChatGoD College Data Search API
  * --------------------------------
  * File: Api/getCollegeData.php
- * Version: 1.3.1
- * Author: Mayank Chawdhari ( AKA BOSS294 ) — updated
- * Last updated: <?php echo date('Y-m-d'); ?>
+ * Version: 1.3.0
+ * Author: Mayank Chawdhari ( AKA BOSS294 )
+ * Last updated: Mai nahi btaunga :P
  *
- * NOTE: This file is the original v1.3.0 plus the following additions:
- *  - Dynamic global NLP config loaded from DB: stopwords, synonyms, greetings.
- *  - Fixed greetings matching (token-aware).
- *  - Anti-abuse / rate-limiting (high-level, cache-based per auth_token + IP).
- *  - Interaction logging + online learning: feedback payload updates RANK_SCORE
- *    in `college_qa_suggestions` and is logged to `interaction_logs`.
+ * DESCRIPTION:
+ * This API endpoint provides secure, structured access to college data for ChatGoD clients.
+ * It supports natural language queries about placements, fees, hostels, courses, departments, locations, and more.
+ * The API is designed for chatbot and web integrations, returning rich, context-aware results.
  *
- * Only those items were added — the remainder of the file is unchanged.
+ * MAIN FEATURES:
+ * - Authenticated access: Requires a valid college auth token.
+ * - Query normalization and keyword extraction for robust search.
+ * - Multi-stage search:
+ *     1. Fast-path greetings/pleasantries (returns canned responses for "hi", "hello", etc.)
+ *     2. Full-text search (MATCH ... AGAINST) for relevant college data.
+ *     3. Fallback to LIKE-based search if full-text yields no results.
+ *     4. QA fallback: Searches college_qa_suggestions for matching Q&A if no data found.
+ * - Advanced QA ranking: Uses keyword overlap, Levenshtein similarity, and precomputed scores.
+ * - Caching: Uses APCu or file-based cache to reduce DB load for repeated queries.
+ * - Defensive error handling: Returns clear JSON error messages and logs context for debugging.
+ * - Structured results: Each result includes decoded JSON fields for departments, courses, fees, locations, etc.
+ * - Detailed snippets: For each result, generates a human-readable summary (department details, course info, fee breakdown, etc.).
+ * - Suggestions: Returns suggested follow-up queries based on college data.
+ * - Logging: All errors and important events are logged with context (IP, SQL, params).
+ *
+ * USAGE:
+ *   POST JSON to this endpoint:
+ *     {
+ *       "auth_token": "<college token>",
+ *       "query": "placements and fees",
+ *       "limit": 6
+ *     }
+ *   Returns:
+ *     {
+ *       "status": "ok",
+ *       "college": { ... },
+ *       "query": "...",
+ *       "normalized_query": "...",
+ *       "extracted_keywords": [ ... ],
+ *       "results_count": N,
+ *       "results": [ ... ],
+ *       "suggestions": [ ... ]
+ *     }
+ *
+ * SECURITY:
+ * - Only active colleges with valid tokens can access data.
+ * - All inputs are sanitized and validated.
+ * - Errors do not leak sensitive information in production.
+ *
+ *
+ * DEPENDENCIES:
+ * - Requires Connectors/connector.php for DB connection and logging.
+ * - APCu (optional) for caching.
+ *
+ * TYPICAL FLOW:
+ * 1. Validate input and auth token.
+ * 2. Normalize query and extract keywords.
+ * 3. Check for greeting/pleasantry fast-path.
+ * 4. Try cache; if not found, run full-text search.
+ * 5. If no results, run LIKE fallback.
+ * 6. If still no results, run QA fallback.
+ * 7. Assemble results, generate snippets, and return structured JSON.
+ * 8. Log errors and cache results as needed.
+ *
  */
 
 declare(strict_types=1);
@@ -31,11 +83,6 @@ if (!function_exists('apcu_fetch')) {
 }
 if (!function_exists('apcu_store')) {
     function apcu_store($key, $var, $ttl = 0) {
-        return false;
-    }
-}
-if (!function_exists('apcu_delete')) {
-    function apcu_delete($key) {
         return false;
     }
 }
@@ -126,15 +173,6 @@ function cache_set(string $key, $val, int $ttl = 120) {
     @file_put_contents($fn, json_encode($c, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
     return true;
 }
-function cache_delete(string $key) {
-    if (function_exists('apcu_delete')) {
-        @apcu_delete($key);
-        return true;
-    }
-    $fn = sys_get_temp_dir() . '/chatgod_cache_' . md5($key) . '.json';
-    if (is_file($fn)) @unlink($fn);
-    return true;
-}
 
 /* QA ranking helper (overlap + levenshtein + optional RANK_SCORE) */
 function score_qa_row(array $rq, string $queryNorm, array $tokQuery): float {
@@ -166,38 +204,6 @@ function score_qa_row(array $rq, string $queryNorm, array $tokQuery): float {
 }
 
 /* -----------------------
-   Rate-limit / anti-abuse helpers
-   ----------------------- */
-/**
- * rate_limit_check: simple cache-backed rate limiter per auth_token + ip
- * returns: null if ok, or array ['status'=>429,'message'=>...] to return to client
- */
-function rate_limit_check(string $auth, string $ip): ?array {
-    // thresholds (tunable)
-    $per_minute = 120; // requests per minute
-    $per_hour = 2000;  // requests per hour
-    $now_min = date('YmdHi');
-    $now_hour = date('YmdH');
-
-    $key_min = "rl_min:{$auth}:{$ip}:{$now_min}";
-    $key_hour = "rl_hour:{$auth}:{$ip}:{$now_hour}";
-
-    $count_min = cache_get($key_min) ?: 0;
-    $count_hour = cache_get($key_hour) ?: 0;
-
-    if ($count_min >= $per_minute) {
-        return ['status'=>429, 'message'=>'Rate limit exceeded (too many requests).'];
-    }
-    if ($count_hour >= $per_hour) {
-        return ['status'=>429, 'message'=>'Rate limit exceeded (hourly limit).'];
-    }
-
-    cache_set($key_min, $count_min + 1, 70);
-    cache_set($key_hour, $count_hour + 1, 3700);
-    return null;
-}
-
-/* -----------------------
    Input parsing & validation
    ----------------------- */
 
@@ -225,38 +231,21 @@ try {
     }
     $clgId = $college['CLGID'];
 
-    // anti-abuse rate-limit check
-    $clientIp = Connector\client_ip();
-    $rl_check = rate_limit_check($auth, $clientIp);
-    if ($rl_check !== null) {
-        Connector\log_event('WARNING', 'Rate limit hit', ['auth'=>$auth, 'ip'=>$clientIp, 'query_snippet'=>mb_substr($query,0,120)]);
-        send_json(['status'=>'error','message'=>$rl_check['message']], 429);
-    }
-
-    // -----------------------
-    // Load dynamic global NLP configuration from DB (stopwords, synonyms, greetings)
-    // These are global, not college-specific. If tables are missing or empty, fallback to defaults.
-    // Tables (expected examples):
-    //  - nlp_stopwords (word VARCHAR)
-    //  - nlp_synonyms  (keyword VARCHAR, synonym VARCHAR) -> synonyms may be stored per row or as JSON
-    //  - nlp_greetings (phrase VARCHAR, response TEXT)
-    // -----------------------
-    $GLOBAL_STOPWORDS = [
+    // normalize and keywords
+    $STOPWORDS = [
         'the','a','an','and','or','of','in','on','at','for','to','is','are','was','were','be','by','with','that','this','it','from','as','i','you','we','they','have','has','had',
         'please','show','find','get','give','tell','how','what','who','which','when','where','me','my','our','your',
         'क्या','कैसे','है','किस','में','का','की','के','हैं','करें','करे','मुझे','आप','हूँ','हूँ।'
     ];
-    $SYNONYMS = [
-        'placements' => ['placement','placements','placement cell','placementcell','placement-cell','job','jobs','hiring'],
-        'fees' => ['fee','fees','tuition','tuition fees','fee structure'],
-        'hostel' => ['hostel','hostels','accommodation','boarding'],
-        'admission' => ['admission','apply','application','how to apply','application process'],
-        'internship' => ['internship','internships','intern'],
-        'research' => ['research','publications','labs'],
-        'mou' => ['mou','moUs','memorandum of understanding','industry collaboration','partners'],
-        'scholarship' => ['scholarship','scholarships','financial aid']
-    ];
-    $GREETINGS_MAP = [
+
+    $normalized_query = normalize_text($query);
+    $keywords = extract_keywords_advanced($query, 10, $STOPWORDS);
+    $safeLimit = (int)$limit;
+
+    /* -----------------------
+       Greeting / pleasantry fast-path
+       ----------------------- */
+    $greetings_map = [
       'hi' => 'Hello! How can I help you today? You can ask about placements, fees, hostels or courses.',
       'hello' => 'Hello! I can help with placements, fees, courses, hostels — what do you want to know?',
       'hey' => 'Hey! Ask me about placements, fee structure, admissions or campus facilities.',
@@ -264,163 +253,21 @@ try {
       'thanks' => "You're welcome! Anything else I can help with?",
       'thank you' => "Glad to help — want to ask about placements or courses next?"
     ];
-
-    // Try to fetch stopwords
-    try {
-        $q = $pdo->query("SELECT word FROM nlp_stopwords WHERE is_active = 1");
-        if ($q) {
-            $rows = $q->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($rows as $rw) {
-                $w = trim((string)($rw['word'] ?? ''));
-                if ($w !== '') $GLOBAL_STOPWORDS[] = $w;
-            }
-            // make unique
-            $GLOBAL_STOPWORDS = array_values(array_unique($GLOBAL_STOPWORDS));
-        }
-    } catch (Throwable $e) {
-        // ignore if table not present or other errors - default list will be used
-        Connector\log_event('INFO', 'nlp_stopwords load skipped or failed', ['err'=>$e->getMessage()]);
-    }
-
-    // Try to fetch synonyms: expect rows with columns (keyword, synonym)
-    try {
-        $q = $pdo->query("SELECT keyword, synonym FROM nlp_synonyms WHERE is_active = 1");
-        if ($q) {
-            $rows = $q->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($rows as $rw) {
-                $k = trim((string)($rw['keyword'] ?? ''));
-                $s = trim((string)($rw['synonym'] ?? ''));
-                if ($k === '' || $s === '') continue;
-                // synonyms may be comma separated or single; split if needed
-                $parts = preg_split('/\s*,\s*/u', $s);
-                foreach ($parts as $p) {
-                    if ($p === '') continue;
-                    if (!isset($SYNONYMS[$k])) $SYNONYMS[$k] = [];
-                    if (!in_array($p, $SYNONYMS[$k], true)) $SYNONYMS[$k][] = $p;
-                }
-            }
-        }
-    } catch (Throwable $e) {
-        Connector\log_event('INFO', 'nlp_synonyms load skipped or failed', ['err'=>$e->getMessage()]);
-    }
-
-    // Try to fetch greetings map: expect rows with (phrase, response)
-    try {
-        $q = $pdo->query("SELECT phrase, response FROM nlp_greetings WHERE is_active = 1");
-        if ($q) {
-            $rows = $q->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($rows as $rw) {
-                $p = trim((string)($rw['phrase'] ?? ''));
-                $r = trim((string)($rw['response'] ?? ''));
-                if ($p === '' || $r === '') continue;
-                $GREETINGS_MAP[$p] = $r;
-            }
-        }
-    } catch (Throwable $e) {
-        Connector\log_event('INFO', 'nlp_greetings load skipped or failed', ['err'=>$e->getMessage()]);
-    }
-
-    // normalize and keywords
-    $STOPWORDS = $GLOBAL_STOPWORDS;
-    $normalized_query = normalize_text($query);
-    $keywords = extract_keywords_advanced($query, 10, $STOPWORDS);
-    $safeLimit = (int)$limit;
-
-    /* -----------------------
-       Feedback / interaction learning (LEVEL 5)
-       If client sends 'feedback' object, process it and update RANK_SCORE
-       Expected feedback format (example):
-         "feedback": { "qa_id": 123, "action": "click" }   // action: click|upvote|downvote
-       This branch runs early and returns a small JSON success. It also invalidates cache keys for this college.
-    */
-    if (!empty($inp['feedback']) && is_array($inp['feedback'])) {
-        $fb = $inp['feedback'];
-        $qa_id = (int)($fb['qa_id'] ?? 0);
-        $action = strtolower(trim((string)($fb['action'] ?? '')));
-        if ($qa_id > 0 && in_array($action, ['click','upvote','downvote'], true)) {
-            // determine delta
-            $delta = 0.0;
-            switch ($action) {
-                case 'click':   $delta = 0.5; break;
-                case 'upvote':  $delta = 1.5; break;
-                case 'downvote': $delta = -1.0; break;
-            }
-            try {
-                $stmtUpd = $pdo->prepare("UPDATE college_qa_suggestions SET RANK_SCORE = COALESCE(RANK_SCORE,0) + :d WHERE ID = :id AND CLG_ID = :clg");
-                $stmtUpd->execute([':d' => $delta, ':id' => $qa_id, ':clg' => $clgId]);
-
-                // log interaction to interaction_logs (non-blocking)
-                try {
-                    $ilog = $pdo->prepare("INSERT INTO interaction_logs (CLG_ID, ITEM_TYPE, ITEM_ID, ACTION, IP_ADDR, USER_AGENT, META, CREATED_ON) VALUES (:clg, :it, :iid, :act, :ip, :ua, :meta, NOW())");
-                    $meta = json_encode(['source'=>'api_feedback','payload'=>$fb], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
-                    $ilog->execute([':clg'=>$clgId, ':it'=>'qa', ':iid'=>$qa_id, ':act'=>$action, ':ip'=>$clientIp, ':ua'=>($_SERVER['HTTP_USER_AGENT'] ?? ''), ':meta'=>$meta]);
-                } catch (Throwable $e2) {
-                    // ignore logging failures
-                }
-
-                // Invalidate search cache for this college (broad)
-                $prefix = "cg_search:{$clgId}:";
-                // Since cache keys use md5(...), easiest is to try deleting a small set of likely keys:
-                // delete current query cache and a general cache for empty query
-                cache_delete($prefix . md5($normalized_query . '|' . $safeLimit));
-                cache_delete($prefix . md5('|' . $safeLimit));
-            } catch (Throwable $e) {
-                Connector\log_event('ERROR', 'Feedback update failed', ['err'=>$e->getMessage(), 'clg'=>$clgId, 'qa_id'=>$qa_id, 'action'=>$action]);
-                send_json(['status'=>'error','message'=>'feedback update failed'], 500);
-            }
-            send_json(['status'=>'ok','message'=>'feedback recorded','qa_id'=>$qa_id,'action'=>$action], 200);
-        } else {
-            send_json(['status'=>'error','message'=>'invalid feedback payload'], 400);
-        }
-    }
-
-    /* -----------------------
-       Greeting / pleasantry fast-path (improved)
-       We try to match tokens and synonyms (token-aware). This fixes brittle regex misses.
-       ----------------------- */
     if ($normalized_query !== '') {
-        // build token set
-        $tokens = preg_split('/\s+/u', $normalized_query, -1, PREG_SPLIT_NO_EMPTY);
-        $tokenSet = array_unique($tokens);
-
-        // build flattened synonyms map -> for quick lookup map token->canonical
-        $flatSyn = [];
-        foreach ($SYNONYMS as $canon => $vals) {
-            foreach ($vals as $v) {
-                $flatSyn[normalize_text($v)] = $canon;
+        foreach ($greetings_map as $k => $resp) {
+            if (preg_match('/\b' . preg_quote($k, '/') . '\b/u', $normalized_query)) {
+                send_json([
+                    'status'=>'ok',
+                    'college'=>['CLGID'=>$college['CLGID'],'CLG_NAME'=>$college['CLG_NAME']],
+                    'query'=>$query,
+                    'normalized_query'=>$normalized_query,
+                    'extracted_keywords'=>[],
+                    'results_count'=>0,
+                    'results'=>[],
+                    'nearest_qa'=>[],
+                    'nearest_suggestions'=>[$resp, 'Ask about placements', 'Ask about fees']
+                ], 200);
             }
-            // also ensure canonical maps to itself
-            $flatSyn[normalize_text($canon)] = $canon;
-        }
-
-        // check tokens vs greetings keys in three ways:
-        // 1) exact token match,
-        // 2) token maps via synonyms to greeting keys,
-        // 3) substring presence (for multi-word greeting phrases).
-        $gmatch = null;
-        foreach ($GREETINGS_MAP as $k => $resp) {
-            $kNorm = normalize_text($k);
-            // token exact or synonym match
-            foreach ($tokenSet as $t) {
-                if ($t === $kNorm) { $gmatch = $resp; break 2; }
-                if (isset($flatSyn[$t]) && $flatSyn[$t] === $kNorm) { $gmatch = $resp; break 2; }
-            }
-            // substring check on whole normalized query (handles "hello bot" etc)
-            if (mb_stripos($normalized_query, $kNorm, 0, 'UTF-8') !== false) { $gmatch = $resp; break; }
-        }
-
-        if ($gmatch !== null) {
-            send_json([
-                'status'=>'ok',
-                'college'=>['CLGID'=>$college['CLGID'],'CLG_NAME'=>$college['CLG_NAME']],
-                'query'=>$query,
-                'normalized_query'=>$normalized_query,
-                'extracted_keywords'=>[],
-                'results_count'=>0,
-                'results'=>[],
-                'nearest_qa'=>[],
-                'nearest_suggestions'=>[$gmatch, 'Ask about placements', 'Ask about fees']
-            ], 200);
         }
     }
 

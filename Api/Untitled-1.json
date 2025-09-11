@@ -1,0 +1,52 @@
+{
+    "status": "ok",
+    "college": {
+        "CLGID": "11111111-aaaa-4aaa-8aaa-111111111111",
+        "CLG_NAME": "ABC College",
+        "EMAIL": "info@abccollege.edu",
+        "PHONE": "+91-9876543210"
+    },
+    "query": "Hostel",
+    "normalized_query": "hostel",
+    "extracted_keywords": [
+        "hostel"
+    ],
+    "results_count": 1,
+    "results": [
+        {
+            "DATAID": "32d3f8e6-1707-4c4a-9248-77ba0c88fd48",
+            "DATA_TYPE": "OTHER",
+            "CLG_BASIC": {
+                "placements": {
+                    "average_lpa": 6.2,
+                    "median_lpa": 4.8,
+                    "highest_lpa": 22,
+                    "placement_rate_pct": 78
+                },
+                "infrastructure": {
+                    "hostel": "Capacity 800, warden-run, Wi-Fi",
+                    "sports": "Football, Cricket, Badminton, Gym",
+                    "healthcare": "On-campus medical centre"
+                },
+                "research_incubation": "MoUs with TechCorp R&D; annual tech conclave 'ABCTech'"
+            },
+            "CLG_LOCATIONS": null,
+            "CLG_COURSES": null,
+            "CLG_FEES": null,
+            "CLG_DEPARTMENTS": null,
+            "KEYWORDS": [
+                "placements",
+                "incubation",
+                "hostel",
+                "library"
+            ],
+            "snippet": "placements incubation hostel research ABCTech MOUs",
+            "score": 0.3624762296676636
+        }
+    ],
+    "suggestions": [
+        "Ask about placements",
+        "Ask about fees",
+        "Ask about hostel"
+    ]
+}
