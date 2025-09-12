@@ -6,10 +6,17 @@
     <title>Document</title>
 </head>
 <body>
-    <script type="module">
-    import ChatWidget from '/activator.js';
-    ChatWidget.init({ templateUrl: '/main.php', processorUrl: '/processor.php' });
-    </script>
+    <?php
+    include 'main.php';
+    include 'Contents/index/nav.php';
+    include 'Contents/index/hero.php';
+    include 'Contents/index/aboutus.php';
+    include 'Contents/index/academics.php';
+    include 'Contents/index/faqs.php';
+    include 'Contents/index/testimonials.php';
+    include 'Contents/index/contactus.php';
+    include 'Contents/index/footer.php';
+    ?>
 
 </body>
 </html>

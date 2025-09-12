@@ -18,7 +18,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ChatGoD V1 — UI</title>
+  <title>Gyan sarthi V1 — UI</title>
 
   <!-- Exo 2 font -->
   <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -462,7 +462,6 @@
   flex-direction: column;
 }
 
-/* Sticky header so it stays on top while messages scroll */
 .my-ai.fullscreen .chat-header {
   position: sticky;
   top: 0;
@@ -477,19 +476,15 @@
   justify-content: space-between;
 }
 
-/* messages area becomes the single scrollable region */
 .my-ai.fullscreen .chat-messages {
   flex: 1 1 auto;
   overflow: auto;
   padding: 12px 18px !important;
   gap: 12px !important;
   -webkit-overflow-scrolling: touch;
-  /* ensure header/input do not overlap content */
   padding-top: 12px;
-  padding-bottom: 88px; /* leave space for sticky input */
+  padding-bottom: 88px; 
 }
-
-/* Keep message bubbles sized nicely in fullscreen */
 .my-ai.fullscreen .bubble {
   font-size: 14px !important;
   padding: 12px 16px !important;
@@ -497,7 +492,6 @@
   border-radius: 10px !important;
 }
 
-/* Make the input bar sticky and always at the bottom */
 .my-ai.fullscreen .chat-input {
   position: sticky;
   bottom: 0;
@@ -510,7 +504,6 @@
   border-top: 1px solid rgba(0,0,0,0.04);
 }
 
-/* tidy small items in fullscreen */
 .my-ai.fullscreen .header-info { gap: 2px; }
 .my-ai.fullscreen .header-actions { gap: 8px; }
 .my-ai.fullscreen .robot-avatar { width: 38px !important; height: 38px !important; }
@@ -524,7 +517,6 @@
 .my-ai.fullscreen .send-btn { font-size: 14px !important; padding: 10px 12px !important; }
 .my-ai.fullscreen .feedback-btn { width: 32px !important; height: 32px !important; font-size: 16px !important; }
 
-/* hide launcher & external theme button when fullscreen (kept as !important so no conflicts) */
 .my-ai.fullscreen #globalThemeBtn,
 .my-ai.fullscreen #launcherWrap { display: none !important; }
 
@@ -532,19 +524,15 @@
 </head>
 <body>
 
-  <!-- separate theme cycle button bottom-left -->
   <button id="globalThemeBtn" title="Cycle theme">THEME</button>
 
-  <!-- widget root -->
   <div class="my-ai" id="chatWidget" aria-hidden="false">
-    <!-- launcher -->
     <div id="launcherWrap" style="position:relative; display:flex; gap:8px; align-items:flex-end; justify-content:flex-end;">
       <div class="chat-launcher" id="chatLauncher" role="button" tabindex="0" aria-label="Open Chat">
         <canvas id="chatIconCanvas" width="48" height="48" style="display:block"></canvas>
       </div>
     </div>
 
-    <!-- popup chat -->
     <div id="chatPopup" class="chat-popup" role="dialog" aria-modal="false" aria-labelledby="cg-title">
       <div class="chat-header">
         <div class="robot-avatar" aria-hidden="true">
@@ -552,12 +540,11 @@
         </div>
 
         <div class="header-info">
-          <div class="name" id="cg-title">ChatGoD V1</div>
-          <div class="meta" id="cg-status">Select language • v1.0</div>
+          <div class="name" id="cg-title">Gyan sarthi V1</div>
+          <div class="meta" id="cg-status">Select language </div>
         </div>
 
         <div class="header-actions">
-          <!-- language toggle EN | HI -->
           <button id="langToggle" aria-label="Toggle language">EN | HI</button>
           <button class="icon-btn" id="chatBack" aria-label="Back">← Back</button>
           <button class="icon-btn" id="chatClose" aria-label="Close chat">✕</button>
@@ -579,7 +566,6 @@
       </div>
     </div>
   </div>
-<!-- full updated JS: Three icons + widget logic with backend integration + runtime translation -->
 <script type="module">
   import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
 
@@ -617,12 +603,11 @@
   'use strict';
 
   // ---------- Config ----------
-  const AUTH_TOKEN = 'tok_ABC_2025_example_0001'; // replace in production
+  const AUTH_TOKEN = 'tok_ABC_2025_example_0001'; 
   const SCH_API = '/Api/getScholarshipData.php';   // endpoint handling scholarship actions
   const MAX_RESULTS = 12;
   const TRANSLATE_ENABLED = false; // keep false by default for reliability
-  const RICH_JSON = './rich_responses.json'; // same directory
-
+  const RICH_JSON = './rich_responses.json'; // local rich responses for testing
   // ---------- DOM refs ----------
   const popup = document.getElementById('chatPopup');
   const launcher = document.getElementById('chatLauncher');
@@ -666,7 +651,6 @@
     widgetRoot.classList.add('fullscreen');
     backBtn.style.display = '';
     isFullscreen = true;
-    // Hide theme button and launcher
     globalThemeBtn && (globalThemeBtn.style.display = 'none');
     document.getElementById('launcherWrap') && (document.getElementById('launcherWrap').style.display = 'none');
   }
@@ -675,15 +659,12 @@
     widgetRoot.classList.remove('fullscreen');
     backBtn.style.display = 'none';
     isFullscreen = false;
-    // Show theme button and launcher
     globalThemeBtn && (globalThemeBtn.style.display = '');
     document.getElementById('launcherWrap') && (document.getElementById('launcherWrap').style.display = '');
   }
 
-  // Show back button and exit fullscreen on click
   backBtn.addEventListener('click', exitFullscreen);
 
-  // On first user message, expand to fullscreen
   let userStartedChat = false;
   function addUserBubble(text) {
     if (!messages) return;
@@ -763,7 +744,6 @@
 
   // ---------- Network helpers ----------
   async function apiPost(payload, timeoutMs = 15000) {
-    // map old action names used in widget to API actions supported by backend
     const mapped = Object.assign({}, payload);
     if (payload && payload.action) {
       // mapping rules:
@@ -855,7 +835,7 @@
         if (Array.isArray(res.names)) {
           namesCache = res.names;
         } else if (res.meta && Array.isArray(res.meta.courses)) {
-          // fallback: use course names as names cache (not ideal, but still useful)
+          // fallbak: use course names as names cache (not ideal, but still useful)
           namesCache = res.meta.courses.slice(0, 800);
         } else if (Array.isArray(res.results)) {
           namesCache = res.results.map(r => r.name).filter(Boolean);
@@ -928,10 +908,8 @@
 
   async function renderScholarshipRecord(rec) {
     if (!rec) return;
-    // Prefer typewriter for the header + small details appended as HTML for speed.
     const title = `${rec.name || 'Scholarship'}`;
     await typeIntoBubble(title, Math.max(12, typingSpeed));
-    // then add structured HTML block
     const incomeLines = Array.isArray(rec.income_limit_texts) ? rec.income_limit_texts : (rec.income_limit_text ? [rec.income_limit_text] : []);
     const siteLinks = Array.isArray(rec.site_urls) ? rec.site_urls : (rec.site_text ? [rec.site_text] : []);
     const docs = Array.isArray(rec.documents_required) ? rec.documents_required : [];
@@ -974,7 +952,6 @@
     html += `</div>`;
 
     const bubble = addAIBubbleHtml(html);
-    // attach quick actions: How to apply / Refine suggestion
     if (bubble) {
       const actions = document.createElement('div');
       actions.style.display = 'flex';
@@ -1003,7 +980,6 @@
   }
 
 function askRefinementQuestions(rec) {
-  // use configured flow prompts when available, otherwise fallback to hard-coded copy
   const prompts = (richResponses && richResponses.flow_prompts) ? richResponses.flow_prompts : {
     ask_income: "What's your family's annual income? (type or choose a suggestion)",
     ask_course: "Which course are you studying / applying for? (choose from the list)",
@@ -1374,7 +1350,6 @@ function askRefinementQuestions(rec) {
   // expose for debugging
   window.ScholarWidget = { doSearch, fetchScholarshipByName, sendEvent, loadScholarshipNames };
 
-  // make sure functions referenced above exist (hoisted)
 })();
 </script>
 
