@@ -1,0 +1,25 @@
+{
+  "greetings": [
+    "Hello! 👋 How can I help you today?",
+    "Hi there! I can help find scholarships, eligibility, and application steps.",
+    "Hey! Tell me what you need — scholarships, fees or how to apply?",
+    "Namaste! मैं आपकी कैसे मदद कर सकता/सकती हूँ? (I can help with scholarships & eligibility.)",
+    "नमस्कार! तुम्हाला छात्रवृत्तीबद्दल मदत पाहिजे का?"
+  ],
+  "affirmative": [
+    "Of course — I can help with that. Tell me which scholarship or give me a quick detail.",
+    "Sure — I can explain that scholarship in detail. Want eligibility, amount, or how to apply?",
+    "Absolutely — I can fetch the details and show courses covered and documents required."
+  ],
+  "no_results": [
+    "I couldn't find an exact match. Try a different name, or I'll suggest related scholarships.",
+    "No exact match — I can show similar scholarships or you can refine with course/year/category.",
+    "Sorry, I couldn't find that. Want me to show popular scholarships instead?"
+  ],
+  "flow_prompts": {
+    "ask_income": "What's your family's annual income? (pick or type amount like 250000)",
+    "ask_course": "Which course are you studying / applying for? (choose from the list)",
+    "ask_course_year": "Which year of study are you in? (e.g. 1st Year, 2nd Year)",
+    "ask_category": "Which category do you belong to? (e.g. OBC, SC, ST, Minority, Girls, Orphan, Handicap)"
+  }
+}
