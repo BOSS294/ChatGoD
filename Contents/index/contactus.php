@@ -30,7 +30,8 @@
     }
 
     .contact-container {
-      width: 1400px;
+      max-width: 1200px;
+      width: 100%;
       margin: 0 auto;
       background: #ffffff;
       border-radius: var(--card-radius);
@@ -187,7 +188,9 @@
 
     .form-group {
       margin-bottom: 20px;
+
     }
+
 
     .form-label {
       display: block;
@@ -198,7 +201,7 @@
     }
 
     .form-input {
-      width: 100%;
+      width: 90%;
       padding: 14px 16px;
       border: 1px solid var(--border-light);
       border-radius: 8px;
@@ -254,6 +257,50 @@
 
     .mobile-contact-details {
       display: none;
+      padding: 30px;
+      background: var(--primary-light);
+      border-top: 1px solid var(--border-light);
+    }
+    
+    .mobile-contact-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--primary-dark);
+      margin: 0 0 20px;
+      text-align: center;
+    }
+    
+    .mobile-contact-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .mobile-contact-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 18px;
+    }
+    
+    .mobile-contact-text {
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--text-dark);
+    }
+    
+    .mobile-contact-text strong {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 3px;
+      color: var(--primary-dark);
     }
 
     /* Mobile Responsiveness */
@@ -268,50 +315,6 @@
       
       .mobile-contact-details {
         display: block;
-        padding: 30px;
-        background: var(--primary-light);
-        border-top: 1px solid var(--border-light);
-      }
-      
-      .mobile-contact-title {
-        font-size: 20px;
-        font-weight: 700;
-        color: var(--primary-dark);
-        margin: 0 0 20px;
-        text-align: center;
-      }
-      
-      .mobile-contact-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 15px;
-        margin-bottom: 20px;
-      }
-      
-      .mobile-contact-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: var(--primary);
-        color: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        font-size: 18px;
-      }
-      
-      .mobile-contact-text {
-        font-size: 15px;
-        line-height: 1.6;
-        color: var(--text-dark);
-      }
-      
-      .mobile-contact-text strong {
-        display: block;
-        font-weight: 600;
-        margin-bottom: 3px;
-        color: var(--primary-dark);
       }
     }
 
@@ -336,6 +339,10 @@
         padding: 12px 24px;
         font-size: 14px;
       }
+      
+      .mobile-contact-details {
+        padding: 25px;
+      }
     }
 
     @media (max-width: 576px) {
@@ -355,6 +362,9 @@
       .cta-buttons {
         flex-direction: column;
       }
+      .form-group input {
+        width:90%;
+      }
       
       .btn {
         width: 100%;
@@ -362,7 +372,23 @@
       }
       
       .mobile-contact-details {
-        padding: 25px 20px;
+        padding: 20px;
+        align-items: center;
+      }
+      
+      .mobile-contact-title {
+        font-size: 18px;
+      }
+      
+      .mobile-contact-item {
+        flex-direction: column;
+        text-align: center;
+        gap: 10px;
+        align-items: center;
+      }
+      
+      .mobile-contact-icon {
+        margin: 0 auto;
       }
     }
   </style>
@@ -487,6 +513,15 @@
             <strong>Registrar: Dr. Sudeepto Mukherjee</strong>
             9584667722
           </div>
+        </div>
+        
+        <div class="cta-buttons" style="justify-content: center; margin-top: 20px;margin-left:10%; width:80%;">
+          <a href="#" class="btn btn-primary" style="background: var(--primary); color: white; margin: 5px;">
+            <i class="fas fa-download"></i> Get Brochure
+          </a>
+          <a href="#" class="btn btn-outline" style="border-color: var(--primary); color: var(--primary); margin: 5px;">
+            <i class="fas fa-info-circle"></i> Admission Inquiry
+          </a>
         </div>
       </div>
     </div>

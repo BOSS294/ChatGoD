@@ -266,8 +266,6 @@
           <a href="/privacy" class="menu-link"><i class="fa-solid fa-shield-halved" style="width:20px;text-align:center;color:var(--primary-dark);"></i> Privacy Policy</a>
           <a href="/terms" class="menu-link"><i class="fa-solid fa-file-contract" style="width:20px;text-align:center;color:var(--primary-dark);"></i> Terms &amp; Conditions</a>
         </nav>
-
-        <div style="margin-top:auto;font-size:13px;color:var(--dark);">&copy; <%= new Date().getFullYear() %> Gyan Ganga Institute</div>
       </div>
     </div>
 
